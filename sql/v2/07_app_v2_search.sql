@@ -22,8 +22,8 @@ SELECT
     i.customer_id,
     c.full_name          AS customer_name,
     i.domain,
-    i.channel,
-    i.interaction_type,
+    UPPER(i.channel)          AS channel,
+    UPPER(i.interaction_type) AS interaction_type,
     COALESCE(i.subject, 'Interaction') AS subject,
     COALESCE(i.notes, i.subject, '')   AS content,
     i.sentiment_score,
@@ -58,6 +58,41 @@ SELECT
     NULL,
     t.call_date
 FROM CUSTOMER_360_DB.RAW.LENDING_CALL_TRANSCRIPTS t
+JOIN CUSTOMER_360_DB.CANONICAL.CUSTOMER c ON c.customer_id = t.customer_id
+UNION ALL
+-- the written channel: each email is its own document so a thread can be
+-- retrieved message by message, with the escalation visible in sequence
+SELECT
+    e.message_id,
+    e.customer_id,
+    c.full_name,
+    c.domain,
+    'EMAIL',
+    CASE WHEN e.direction = 'INBOUND' THEN 'EMAIL_FROM_CUSTOMER' ELSE 'EMAIL_TO_CUSTOMER' END,
+    e.subject,
+    e.body,
+    NULL,
+    e.sent_at
+FROM CUSTOMER_360_DB.RAW.EMAIL_MESSAGE e
+JOIN CUSTOMER_360_DB.CANONICAL.CUSTOMER c ON c.customer_id = e.customer_id
+UNION ALL
+-- tickets, so "show me SLA breaches on claims" is answerable
+SELECT
+    t.ticket_id,
+    t.customer_id,
+    c.full_name,
+    t.domain,
+    t.channel,
+    'SUPPORT_TICKET',
+    t.subject,
+    t.category || ' ticket, priority ' || t.priority || ', status ' || t.status
+      || CASE WHEN t.sla_breached THEN '. SLA BREACHED.' ELSE '.' END
+      || CASE WHEN t.reopen_count > 0 THEN ' Reopened ' || t.reopen_count::VARCHAR || ' time(s).' ELSE '' END
+      || COALESCE(' Linked to claim ' || t.linked_claim_id || '.', '')
+      || COALESCE(' Policy ' || t.linked_policy_id || '.', ''),
+    NULL,
+    t.opened_at
+FROM CUSTOMER_360_DB.RAW.SUPPORT_TICKET t
 JOIN CUSTOMER_360_DB.CANONICAL.CUSTOMER c ON c.customer_id = t.customer_id;
 
 CREATE OR REPLACE CORTEX SEARCH SERVICE INTERACTION_SEARCH_V2

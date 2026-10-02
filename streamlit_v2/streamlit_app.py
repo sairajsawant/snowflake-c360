@@ -433,6 +433,38 @@ def step_understand():
                "threshold in Config Studio still has no effect, and a third domain would "
                "produce no state at all.")
 
+    st.markdown("##### The evidence behind this state")
+    why = sf.why_this_state(cid)
+    if len(why):
+        der = int((why.ORIGIN == "DERIVED").sum())
+        ext = int((why.ORIGIN == "EXTRACTED").sum())
+        st.caption(f"{ext} signals read out of unstructured text by Cortex, "
+                   f"{der} derived deterministically from source systems — tickets, policy "
+                   f"versions, grievances, portability requests, the employer record. "
+                   f"They are independent evidence, not one fact restated.")
+        st.dataframe(why, hide_index=True, use_container_width=True,
+                     column_config={"SIGNAL_NAME": "Signal", "SIGNAL_VALUE": "Value",
+                                    "ORIGIN": "Origin", "EVIDENCE_REF": "Evidence",
+                                    "CONTRIBUTION": "What it contributes"})
+
+    prof = sf.profile(cid)
+    if prof is not None:
+        flags = []
+        if not fmt.missing(prof["GRIEVANCES_OPEN"]) and prof["GRIEVANCES_OPEN"] > 0:
+            flags.append(f"IRDAI grievance open since {prof['LAST_GRIEVANCE_DATE']}")
+        if fmt.opt_str(prof["PORTABILITY_STAGE"], "") not in ("", "—"):
+            flags.append(f"portability {str(prof['PORTABILITY_STAGE']).replace('_',' ').lower()} "
+                         f"to {prof['PORTABILITY_TARGET']} at {prof['COMPETITOR_DISCOUNT_PCT']}% less")
+        if not fmt.missing(prof["SLA_BREACHES_90D"]) and prof["SLA_BREACHES_90D"] > 0:
+            flags.append(f"{int(prof['SLA_BREACHES_90D'])} SLA breaches in 90 days")
+        if not fmt.missing(prof["LAST_RENEWAL_DAYS_LATE"]) and prof["LAST_RENEWAL_DAYS_LATE"] > 0:
+            flags.append(f"last renewal {int(prof['LAST_RENEWAL_DAYS_LATE'])} days late")
+        if not fmt.missing(prof["EMPLOYEE_COUNT"]) and prof["MEMBER_ROLE"] == "HR_ADMIN":
+            flags.append(f"administers {prof['EMPLOYER_NAME']} — {int(prof['EMPLOYEE_COUNT'])} employees "
+                         f"on {fmt.lakh(prof['GROUP_PREMIUM'])} of group premium")
+        if flags:
+            st.warning("**What the profile adds that this call does not:** " + "; ".join(flags) + ".")
+
     st.markdown("##### The 360 the state was computed from")
     g1, g2 = st.columns(2)
     with g1:

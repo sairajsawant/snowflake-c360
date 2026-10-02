@@ -379,3 +379,109 @@ def search_interactions(query, limit=5):
 
 def clear_caches():
     st.cache_data.clear()
+
+
+# ── profile, timeline and the new sources ────────────────────────────────────
+def profile(cid):
+    """One row with everything the engine reasons over for this customer."""
+    df = _df(f"SELECT * FROM {DB}.APP_V2.V_CUSTOMER_PROFILE WHERE customer_id = ?", [cid])
+    return None if df.empty else df.iloc[0]
+
+
+def why_this_state(cid):
+    """Every signal behind the current state, with what each one contributes."""
+    return _df(f"SELECT * FROM TABLE({DB}.APP_V2.WHY_THIS_STATE({_lit(cid)}))")
+
+
+def all_signals(cid):
+    return _df(f"""
+        SELECT signal_name, signal_value, numeric_value, confidence, evidence_ref, origin
+        FROM {DB}.APP_V2.V_ALL_SIGNALS WHERE customer_id = ?
+        ORDER BY origin, signal_name
+    """, [cid])
+
+
+def tickets(cid, limit=40):
+    return _df(f"""
+        SELECT ticket_id, opened_at, channel, category, priority, subject, status,
+               sla_target_hours, sla_breached, reopen_count, csat_score,
+               linked_claim_id, resolved_at,
+               DATEDIFF(hour, opened_at, COALESCE(resolved_at, CURRENT_TIMESTAMP())) AS age_hours
+        FROM {DB}.RAW.SUPPORT_TICKET WHERE customer_id = ?
+        ORDER BY opened_at DESC LIMIT {int(limit)}
+    """, [cid])
+
+
+def email_threads(cid):
+    return _df(f"""
+        SELECT ticket_id, thread_position, direction, from_address, to_address,
+               subject, body, sent_at
+        FROM {DB}.RAW.EMAIL_MESSAGE WHERE customer_id = ?
+        ORDER BY sent_at DESC, thread_position
+    """, [cid])
+
+
+def policy_versions(cid):
+    return _df(f"""
+        SELECT policy_id, version_no, effective_from, change_type, renewal_status,
+               days_late, sum_insured, premium, no_claim_bonus_pct, riders
+        FROM {DB}.RAW.POLICY_VERSION WHERE customer_id = ?
+        ORDER BY policy_id, version_no
+    """, [cid])
+
+
+def grievances(cid):
+    return _df(f"""
+        SELECT grievance_id, igms_token, filed_date, category, status,
+               escalated_to_ombudsman, description
+        FROM {DB}.RAW.GRIEVANCE WHERE customer_id = ? ORDER BY filed_date DESC
+    """, [cid])
+
+
+def portability(cid):
+    return _df(f"""
+        SELECT request_id, requested_date, target_insurer, current_premium,
+               quoted_premium, stage, status, notes
+        FROM {DB}.RAW.PORTABILITY_REQUEST WHERE customer_id = ? ORDER BY requested_date DESC
+    """, [cid])
+
+
+def timeline(cid, limit=60):
+    """Every dated record for this customer, one stream, newest first."""
+    return _df(f"""
+        SELECT * FROM (
+            SELECT effective_from::TIMESTAMP_NTZ AS when_at, 'Policy' AS source,
+                   change_type AS what,
+                   policy_id || ' · cover ' || TO_VARCHAR(sum_insured)
+                     || ' · premium ' || TO_VARCHAR(premium)
+                     || CASE WHEN renewal_status='LATE'
+                             THEN ' · renewed ' || days_late::VARCHAR || ' days late' ELSE '' END AS detail
+            FROM {DB}.RAW.POLICY_VERSION WHERE customer_id = ?
+            UNION ALL
+            SELECT opened_at, 'Ticket', category,
+                   subject || CASE WHEN sla_breached THEN ' · SLA BREACHED' ELSE '' END
+                           || CASE WHEN reopen_count>0 THEN ' · reopened ' || reopen_count::VARCHAR ELSE '' END
+            FROM {DB}.RAW.SUPPORT_TICKET WHERE customer_id = ?
+            UNION ALL
+            SELECT sent_at, 'Email',
+                   CASE WHEN direction='INBOUND' THEN 'From customer' ELSE 'To customer' END,
+                   subject
+            FROM {DB}.RAW.EMAIL_MESSAGE WHERE customer_id = ?
+            UNION ALL
+            SELECT filed_date::TIMESTAMP_NTZ, 'Claim', claim_status,
+                   claim_id || ' · ' || claim_type || ' · ' || TO_VARCHAR(claim_amount)
+            FROM {DB}.RAW.INSURANCE_CLAIMS WHERE customer_id = ?
+            UNION ALL
+            SELECT filed_date::TIMESTAMP_NTZ, 'Grievance', status,
+                   'IRDAI ' || igms_token || ' · ' || category
+            FROM {DB}.RAW.GRIEVANCE WHERE customer_id = ?
+            UNION ALL
+            SELECT requested_date::TIMESTAMP_NTZ, 'Portability', stage,
+                   target_insurer || ' quoted ' || TO_VARCHAR(quoted_premium)
+                     || ' against ' || TO_VARCHAR(current_premium)
+            FROM {DB}.RAW.PORTABILITY_REQUEST WHERE customer_id = ?
+            UNION ALL
+            SELECT interaction_date, 'Interaction', UPPER(interaction_type), subject
+            FROM {DB}.CANONICAL.INTERACTION WHERE customer_id = ?
+        ) ORDER BY when_at DESC LIMIT {int(limit)}
+    """, [cid] * 7)

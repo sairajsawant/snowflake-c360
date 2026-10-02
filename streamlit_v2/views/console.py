@@ -152,70 +152,133 @@ def customer_360(persona):
                        if st.session_state.get("cid") in ids else 0,
                        format_func=lambda i: f"{i} — {cdf[cdf.CUSTOMER_ID == i].iloc[0]['FULL_NAME']}")
     st.session_state["cid"] = cid
-    c = sf.customer(cid)
+    p = sf.profile(cid)
+    if p is None:
+        st.warning("No profile for this customer.")
+        return
 
-    st.markdown(f"### {c['FULL_NAME']}")
-    st.markdown(fmt.state_badge(c["STATE_NAME"]), unsafe_allow_html=True)
-    st.caption(f"{c['SEGMENT']} · {c['REGION']} · {c['DOMAIN']} · `{cid}`"
-               + fmt.opt_int(c["CREDIT_SCORE"], prefix=" · credit "))
+    st.markdown(f"### {p['FULL_NAME']}")
+    st.markdown(fmt.state_badge(p["STATE_NAME"]), unsafe_allow_html=True)
+    st.caption(f"{fmt.opt_str(p['SEGMENT'])} · {fmt.opt_str(p['REGION'])} · {p['DOMAIN']} · `{cid}` · "
+               f"customer since {p['CUSTOMER_SINCE']} ({fmt.opt_int(p['TENURE_YEARS'])} years)")
 
-    k = st.columns(4)
-    k[0].metric("Relationship", fmt.lakh(c["RELATIONSHIP_VALUE"]))
-    sig = sf.signals(cid)
-    k[1].metric("Signals", len(sig))
-    k[2].metric("Computed score", f"{c['COMPUTED_SCORE']:.3f}"
-                if pd.notna(c["COMPUTED_SCORE"]) else "—")
-    k[3].metric("Owner", fmt.opt_str(c["ASSIGNED_USER"]))
+    k = st.columns(5)
+    k[0].metric("Relationship", fmt.lakh(p["RELATIONSHIP_VALUE"]))
+    k[1].metric("Renewals", fmt.opt_int(p["TENURE_RENEWALS"]) or "—",
+                help="Policy versions on the longest-held policy")
+    k[2].metric("Open tickets", fmt.opt_int(p["TICKETS_OPEN"]) or "0")
+    k[3].metric("SLA breaches 90d", fmt.opt_int(p["SLA_BREACHES_90D"]) or "0")
+    k[4].metric("CSAT", f"{p['CSAT_AVG']:.1f}" if not fmt.missing(p["CSAT_AVG"]) else "—")
 
-    if cid in FLAGS:
-        st.warning(f"**{FLAGS[cid][0]}** — {FLAGS[cid][1]}")
+    # the things that should stop a reader — shown before anything else
+    alerts = []
+    if not fmt.missing(p["GRIEVANCES_OPEN"]) and p["GRIEVANCES_OPEN"] > 0:
+        alerts.append(("critical", f"**IRDAI grievance open** since {p['LAST_GRIEVANCE_DATE']}. "
+                       "A regulatory filing is the strongest single churn predictor in this market."))
+    if fmt.opt_str(p["PORTABILITY_STAGE"], "") not in ("", "—"):
+        alerts.append(("critical" if p["PORTABILITY_STAGE"] in ("FORM_REQUESTED", "SUBMITTED") else "warn",
+                       f"**Portability {str(p['PORTABILITY_STAGE']).replace('_',' ').lower()}** to "
+                       f"{p['PORTABILITY_TARGET']} — quoted {fmt.inr(p['COMPETITOR_QUOTE'])} against our "
+                       f"{fmt.inr(p['OUR_PREMIUM'])}, **{p['COMPETITOR_DISCOUNT_PCT']}% cheaper**."))
+    if not fmt.missing(p["EMPLOYEE_COUNT"]) and p["MEMBER_ROLE"] == "HR_ADMIN":
+        alerts.append(("warn", f"**Group decision-maker.** {p['HR_CONTACT_NAME']} administers "
+                       f"{p['EMPLOYER_NAME']} — {int(p['EMPLOYEE_COUNT'])} employees, "
+                       f"{fmt.lakh(p['GROUP_PREMIUM'])} annual premium, renews {p['GROUP_RENEWAL_DATE']}. "
+                       "Losing this customer means losing the group."))
+    if not fmt.missing(p["LAST_RENEWAL_DAYS_LATE"]) and p["LAST_RENEWAL_DAYS_LATE"] > 0:
+        alerts.append(("warn", f"Last renewal was **{int(p['LAST_RENEWAL_DAYS_LATE'])} days late** "
+                       f"({fmt.opt_int(p['LATE_RENEWALS'])} late renewals on record)."))
+    for kind, msg in alerts:
+        (st.error if kind == "critical" else st.warning)(msg)
 
-    tabs = st.tabs(["Signals", "Products", "History", "Conversations", "Recommendation"])
+    tabs = st.tabs(["Why this state", "Timeline", "Tickets", "Email", "Policy history",
+                    "Regulatory", "Recommendation"])
 
     with tabs[0]:
-        resolved = sf.signals(cid, resolved_only=True)
-        winners = set(zip(resolved.SIGNAL_NAME, resolved.EVIDENCE_REF))
-        v = sig.assign(used=[("✓" if (n, e) in winners else "")
-                             for n, e in zip(sig.SIGNAL_NAME, sig.EVIDENCE_REF)])
-        st.dataframe(v[["used", "SIGNAL_NAME", "SIGNAL_VALUE", "NUMERIC_VALUE",
-                        "CONFIDENCE", "EVIDENCE_REF", "QUOTE"]],
-                     hide_index=True, use_container_width=True)
-        st.caption("`✓` marks the reading that survived conflict resolution — most severe "
-                   "label first, then recency. Quotes only exist for signals extracted by v2.")
+        st.caption("Every signal behind the current state, and what each one contributes. "
+                   "Eight of the nine new signals are plain SQL over observable facts — "
+                   "a filing exists, a renewal was late, a ticket breached SLA.")
+        why = sf.why_this_state(cid)
+        if len(why):
+            st.dataframe(why, hide_index=True, use_container_width=True,
+                         column_config={"SIGNAL_NAME": "Signal", "SIGNAL_VALUE": "Value",
+                                        "ORIGIN": "Origin", "EVIDENCE_REF": "Evidence",
+                                        "CONTRIBUTION": "What it contributes"})
+            der = int((why.ORIGIN == "DERIVED").sum())
+            ext = int((why.ORIGIN == "EXTRACTED").sum())
+            st.caption(f"{der} derived deterministically from source systems · "
+                       f"{ext} extracted from unstructured text by Cortex.")
+        else:
+            st.info("No signals on file.")
 
     with tabs[1]:
-        prod = sf.products(cid, c["DOMAIN"])
-        st.dataframe(prod, hide_index=True, use_container_width=True) if len(prod) \
-            else st.caption("No products on file.")
-        if c["DOMAIN"] == "insurance":
-            cl = sf.claims(cid)
-            if len(cl):
-                st.dataframe(cl, hide_index=True, use_container_width=True)
-                if cl.AGE_DAYS.max() > 400:
-                    st.caption(f"⚠ Oldest claim computes to {int(cl.AGE_DAYS.max())} days. "
-                               "Seed dates sit in 2024 against a 2026 clock.")
+        st.caption("Every dated record for this customer, one stream — policy versions, "
+                   "tickets, emails, claims, grievances, portability, logged contacts.")
+        tl = sf.timeline(cid)
+        st.dataframe(tl, hide_index=True, use_container_width=True,
+                     column_config={"WHEN_AT": "When", "SOURCE": "Source",
+                                    "WHAT": "What", "DETAIL": "Detail"})
 
     with tabs[2]:
-        h = sf.state_history(cid)
-        st.dataframe(h, hide_index=True, use_container_width=True)
-        if len(h) <= 1:
-            st.caption("Only one state row exists, so there is no before-and-after to show. "
-                       "The row churn that used to fill this table is gone — but so is the "
-                       "audit trail, until a scenario run produces a real transition.")
+        t = sf.tickets(cid)
+        if not len(t):
+            st.info("No tickets.")
+        else:
+            c = st.columns(4)
+            c[0].metric("Total", len(t))
+            c[1].metric("Open", int((t.STATUS == "OPEN").sum()))
+            c[2].metric("SLA breached", int(t.SLA_BREACHED.sum()))
+            c[3].metric("Reopened", int(t.REOPEN_COUNT.sum()))
+            st.dataframe(t, hide_index=True, use_container_width=True)
+            st.caption("SLA breaches and reopens are failures we caused — distinct from the "
+                       "customer being unhappy, and actionable in a different way.")
 
     with tabs[3]:
-        tdf = sf.transcripts(cid, c["DOMAIN"])
-        s = sf.summary(cid)
-        if s:
-            st.markdown("**AI_SUMMARIZE over the conversation history**")
-            st.markdown(f"> {s}")
-        for _, t in tdf.iterrows():
-            with st.expander(f"{t.TRANSCRIPT_ID} · {t.CALL_DATE}"):
-                st.code(t.TRANSCRIPT_TEXT, language=None)
-        if not len(tdf):
-            st.caption("No conversations on file.")
+        em = sf.email_threads(cid)
+        if not len(em):
+            st.info("No email on file for this customer.")
+        else:
+            st.caption(f"{len(em)} messages across {em.TICKET_ID.nunique()} threads. "
+                       "The written channel is where escalation language appears first.")
+            for tid, grp in em.groupby("TICKET_ID", sort=False):
+                grp = grp.sort_values("THREAD_POSITION")
+                head = grp.iloc[0]
+                with st.expander(f"{head['SUBJECT']} · {tid} · {len(grp)} messages"):
+                    for _, m in grp.iterrows():
+                        who = "Customer" if m["DIRECTION"] == "INBOUND" else "Us"
+                        st.markdown(f"**{who}** · {m['SENT_AT']}")
+                        st.text(m["BODY"])
+                        st.divider()
 
     with tabs[4]:
+        pv = sf.policy_versions(cid)
+        if not len(pv):
+            st.info("No policy history.")
+        else:
+            st.caption("How the product was actually used, year by year — premium drift, "
+                       "cover changes, no-claim bonus, and whether each renewal was on time.")
+            st.dataframe(pv, hide_index=True, use_container_width=True)
+            first, cur = p["FIRST_PREMIUM"], p["CURRENT_PREMIUM"]
+            if not fmt.missing(first) and not fmt.missing(cur) and first:
+                st.caption(f"Premium across the relationship: {fmt.inr(first)} → {fmt.inr(cur)} "
+                           f"({(cur/first - 1) * 100:.0f}% over {fmt.opt_int(p['TENURE_YEARS'])} years). "
+                           f"No-claim bonus peaked at {fmt.opt_int(p['PEAK_NCB'])}% and now sits at "
+                           f"{fmt.opt_int(p['CURRENT_NCB'])}%.")
+
+    with tabs[5]:
+        g, pr = sf.grievances(cid), sf.portability(cid)
+        if not len(g) and not len(pr):
+            st.success("No regulatory filing and no portability request on record.")
+        if len(g):
+            st.markdown("**IRDAI grievances**")
+            st.dataframe(g, hide_index=True, use_container_width=True)
+        if len(pr):
+            st.markdown("**Portability requests**")
+            st.dataframe(pr, hide_index=True, use_container_width=True)
+            st.caption("Portability is a regulated process with forms and deadlines — so this "
+                       "is an observed act, not an inference from tone.")
+
+    with tabs[6]:
         recs = sf.recommend(cid, persona, 0)
         if len(recs):
             st.dataframe(recs[["RANKING", "ACTION_NAME", "POLICY_STATUS", "SCORE",
