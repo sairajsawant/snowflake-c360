@@ -1,0 +1,75 @@
+-- =============================================================================
+-- Judge access.
+--
+-- Streamlit in Snowflake has no anonymous mode and Snowflake has no guest-user
+-- concept, so every viewer needs a real user in this account. This grants the
+-- least privilege that still lets a judge drive a full scenario:
+--   * read the data the app displays,
+--   * USAGE on the APP_V2 procedures, which are owner's-rights and therefore do
+--     the writing on the judge's behalf,
+--   * no direct INSERT / UPDATE / DELETE anywhere.
+--
+-- Judges run on their own warehouse with a credit cap, so a runaway AI loop
+-- cannot suspend COMPUTE_WH and take the demo down with it.
+-- =============================================================================
+USE ROLE ACCOUNTADMIN;
+
+-- ─── isolated compute with a hard cap ────────────────────────────────────────
+CREATE WAREHOUSE IF NOT EXISTS JUDGE_WH
+  WAREHOUSE_SIZE = 'XSMALL'
+  AUTO_SUSPEND = 60
+  AUTO_RESUME = TRUE
+  INITIALLY_SUSPENDED = TRUE
+  COMMENT = 'Evaluation traffic only. Capped by JUDGE_MONITOR.';
+
+CREATE RESOURCE MONITOR IF NOT EXISTS JUDGE_MONITOR
+  WITH CREDIT_QUOTA = 20
+  FREQUENCY = MONTHLY
+  START_TIMESTAMP = IMMEDIATELY
+  TRIGGERS
+    ON 75 PERCENT DO NOTIFY
+    ON 90 PERCENT DO NOTIFY
+    ON 100 PERCENT DO SUSPEND;
+
+ALTER WAREHOUSE JUDGE_WH SET RESOURCE_MONITOR = JUDGE_MONITOR;
+
+-- ─── role ────────────────────────────────────────────────────────────────────
+CREATE ROLE IF NOT EXISTS C360_JUDGE
+  COMMENT = 'Hackathon evaluation: read the platform, run scenarios, change nothing directly.';
+
+GRANT USAGE ON WAREHOUSE JUDGE_WH TO ROLE C360_JUDGE;
+GRANT USAGE ON DATABASE CUSTOMER_360_DB TO ROLE C360_JUDGE;
+
+-- read access to everything the app surfaces
+GRANT USAGE ON SCHEMA CUSTOMER_360_DB.APP_V2    TO ROLE C360_JUDGE;
+GRANT USAGE ON SCHEMA CUSTOMER_360_DB.ENGINE    TO ROLE C360_JUDGE;
+GRANT USAGE ON SCHEMA CUSTOMER_360_DB.CONFIG    TO ROLE C360_JUDGE;
+GRANT USAGE ON SCHEMA CUSTOMER_360_DB.CANONICAL TO ROLE C360_JUDGE;
+GRANT USAGE ON SCHEMA CUSTOMER_360_DB.RAW       TO ROLE C360_JUDGE;
+GRANT USAGE ON SCHEMA CUSTOMER_360_DB.SEARCH    TO ROLE C360_JUDGE;
+
+GRANT SELECT ON ALL TABLES    IN SCHEMA CUSTOMER_360_DB.ENGINE    TO ROLE C360_JUDGE;
+GRANT SELECT ON ALL TABLES    IN SCHEMA CUSTOMER_360_DB.CONFIG    TO ROLE C360_JUDGE;
+GRANT SELECT ON ALL TABLES    IN SCHEMA CUSTOMER_360_DB.RAW       TO ROLE C360_JUDGE;
+GRANT SELECT ON ALL TABLES    IN SCHEMA CUSTOMER_360_DB.APP_V2    TO ROLE C360_JUDGE;
+GRANT SELECT ON ALL VIEWS     IN SCHEMA CUSTOMER_360_DB.APP_V2    TO ROLE C360_JUDGE;
+GRANT SELECT ON ALL DYNAMIC TABLES IN SCHEMA CUSTOMER_360_DB.CANONICAL TO ROLE C360_JUDGE;
+GRANT SELECT ON ALL TABLES    IN SCHEMA CUSTOMER_360_DB.CANONICAL TO ROLE C360_JUDGE;
+
+-- future-proof so a new table does not silently break a judge's session
+GRANT SELECT ON FUTURE TABLES IN SCHEMA CUSTOMER_360_DB.ENGINE TO ROLE C360_JUDGE;
+GRANT SELECT ON FUTURE VIEWS  IN SCHEMA CUSTOMER_360_DB.APP_V2 TO ROLE C360_JUDGE;
+
+-- the procedures do the writing, under owner's rights
+GRANT USAGE ON ALL PROCEDURES IN SCHEMA CUSTOMER_360_DB.APP_V2 TO ROLE C360_JUDGE;
+GRANT USAGE ON ALL FUNCTIONS  IN SCHEMA CUSTOMER_360_DB.APP_V2 TO ROLE C360_JUDGE;
+
+-- the app itself, and search for the Ask page
+GRANT USAGE ON STREAMLIT CUSTOMER_360_DB.APP_V2.CUSTOMER_360_APP_V2 TO ROLE C360_JUDGE;
+GRANT USAGE ON CORTEX SEARCH SERVICE CUSTOMER_360_DB.SEARCH.CUSTOMER_INTERACTION_SEARCH
+  TO ROLE C360_JUDGE;
+
+-- Cortex, for the AI calls the app makes directly rather than through a procedure
+GRANT DATABASE ROLE SNOWFLAKE.CORTEX_USER TO ROLE C360_JUDGE;
+
+SELECT 'C360_JUDGE role ready' AS status;
