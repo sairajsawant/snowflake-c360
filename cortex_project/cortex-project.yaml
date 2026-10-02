@@ -1,0 +1,17 @@
+version: 1
+artifacts:
+  - path: ../../../../../../private/tmp/04_sv_minimal.yaml
+    type: semantic_view
+    targets:
+      default:
+        object: CUSTOMER_360_DB.APP.CUSTOMER_DECISIONING_VIEW
+  - path: ../../../../../../private/tmp/04_sv_2table_norel.yaml
+    type: semantic_view
+    targets:
+      default:
+        object: CUSTOMER_360_DB.APP.CUSTOMER_DECISIONING_VIEW
+  - path: ../../../../../../private/tmp/04_sv_4table_norel.yaml
+    type: semantic_view
+    targets:
+      default:
+        object: CUSTOMER_360_DB.APP.CUSTOMER_DECISIONING_VIEW

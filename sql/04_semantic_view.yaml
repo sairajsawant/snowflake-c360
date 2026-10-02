@@ -1,0 +1,255 @@
+name: CUSTOMER_DECISIONING_VIEW
+tables:
+  - name: CUSTOMER_360_DB.ENGINE.CUSTOMER_360
+    base_table:
+      database: CUSTOMER_360_DB
+      schema: ENGINE
+      table: CUSTOMER_360
+    dimensions:
+      - name: customer_id
+        expr: customer_id
+        description: Unique customer identifier
+        unique: true
+      - name: full_name
+        expr: full_name
+        description: Customer full name
+      - name: email
+        expr: email
+        description: Customer email address
+      - name: domain
+        expr: domain
+        description: Business domain (insurance or lending)
+      - name: segment
+        expr: segment
+        description: Customer segment classification
+      - name: region
+        expr: region
+        description: Customer geographic region/state
+      - name: source_system
+        expr: source_system
+        description: Source system identifier
+    measures:
+      - name: customer_lifetime_value
+        expr: lifetime_value
+        description: Customer lifetime value in dollars
+        default_aggregation: sum
+      - name: relationship_count
+        expr: relationship_count
+        description: Number of active relationships (policies/loans)
+        default_aggregation: sum
+      - name: total_relationship_value
+        expr: total_relationship_value
+        description: Total value across all relationships
+        default_aggregation: sum
+      - name: total_periodic_amount
+        expr: total_periodic_amount
+        description: Total recurring payment amount
+        default_aggregation: sum
+      - name: open_issues
+        expr: open_issues
+        description: Count of unresolved claims or issues
+        default_aggregation: sum
+      - name: avg_sentiment
+        expr: avg_sentiment
+        description: Average sentiment score across interactions
+        default_aggregation: avg
+      - name: interaction_count
+        expr: interaction_count
+        description: Total number of customer interactions
+        default_aggregation: sum
+    time_dimensions:
+      - name: customer_since
+        expr: customer_since
+        description: Date customer relationship began
+      - name: last_interaction_date
+        expr: last_interaction_date
+        description: Most recent interaction timestamp
+      - name: next_renewal_date
+        expr: next_renewal_date
+        description: Next policy/account renewal date
+
+  - name: CUSTOMER_360_DB.ENGINE.CUSTOMER_STATE
+    base_table:
+      database: CUSTOMER_360_DB
+      schema: ENGINE
+      table: CUSTOMER_STATE
+    dimensions:
+      - name: state_customer_id
+        expr: customer_id
+        description: Customer identifier for state
+      - name: state_id
+        expr: state_id
+        description: Current state identifier
+      - name: state_name
+        expr: state_name
+        description: Current state name (e.g., HIGH_CHURN_RISK)
+      - name: state_domain
+        expr: domain
+        description: Domain for this state
+      - name: is_current
+        expr: is_current
+        description: Whether this is the current state
+    measures:
+      - name: severity
+        expr: severity
+        description: State severity level (1-4)
+        default_aggregation: max
+      - name: computed_score
+        expr: computed_score
+        description: Computed risk score from signal aggregation
+        default_aggregation: avg
+    time_dimensions:
+      - name: effective_from
+        expr: effective_from
+        description: When this state became effective
+
+  - name: CUSTOMER_360_DB.ENGINE.DECISION_QUEUE
+    base_table:
+      database: CUSTOMER_360_DB
+      schema: ENGINE
+      table: DECISION_QUEUE
+    dimensions:
+      - name: queue_customer_id
+        expr: customer_id
+        description: Customer in the decision queue
+      - name: queue_customer_name
+        expr: customer_name
+        description: Customer name in queue
+      - name: queue_state_name
+        expr: state_name
+        description: State that triggered the queue entry
+      - name: queue_domain
+        expr: domain
+        description: Domain for queue entry
+      - name: urgency
+        expr: urgency
+        description: Urgency level (CRITICAL, HIGH, MEDIUM, LOW)
+      - name: queue_status
+        expr: status
+        description: Queue item status (PENDING, RESOLVED)
+    measures:
+      - name: queue_severity
+        expr: severity
+        description: Severity of the queue item
+        default_aggregation: max
+    time_dimensions:
+      - name: queue_created_at
+        expr: created_at
+        description: When the queue item was created
+
+  - name: CUSTOMER_360_DB.ENGINE.ACTION_EFFECTIVENESS
+    base_table:
+      database: CUSTOMER_360_DB
+      schema: ENGINE
+      table: ACTION_EFFECTIVENESS
+    dimensions:
+      - name: eff_action_id
+        expr: action_id
+        description: Action identifier
+      - name: eff_state_id
+        expr: state_id
+        description: State identifier for effectiveness
+      - name: eff_domain_id
+        expr: domain_id
+        description: Domain for effectiveness data
+    measures:
+      - name: success_rate
+        expr: success_rate
+        description: Action success rate (0-1)
+        default_aggregation: avg
+      - name: success_count
+        expr: success_count
+        description: Number of successful outcomes
+        default_aggregation: sum
+      - name: total_count
+        expr: total_count
+        description: Total number of action attempts
+        default_aggregation: sum
+      - name: avg_uplift
+        expr: avg_uplift
+        description: Average uplift from action
+        default_aggregation: avg
+      - name: confidence
+        expr: confidence
+        description: Statistical confidence level
+        default_aggregation: avg
+
+relationships:
+  - name: customer_to_state
+    left_table: CUSTOMER_360_DB.ENGINE.CUSTOMER_360
+    right_table: CUSTOMER_360_DB.ENGINE.CUSTOMER_STATE
+    join_type: left_outer
+    relationship_type: one_to_many
+    relationship_columns:
+      - left_column: customer_id
+        right_column: state_customer_id
+
+  - name: customer_to_queue
+    left_table: CUSTOMER_360_DB.ENGINE.CUSTOMER_360
+    right_table: CUSTOMER_360_DB.ENGINE.DECISION_QUEUE
+    join_type: left_outer
+    relationship_type: one_to_many
+    relationship_columns:
+      - left_column: customer_id
+        right_column: queue_customer_id
+
+verified_queries:
+  - name: high_churn_risk_customers
+    question: Which customers are at high churn risk?
+    verified_at: 1727308800
+    verified_by: system
+    sql: >
+      SELECT c.customer_id, c.full_name, c.domain, cs.state_name, cs.severity, c.lifetime_value
+      FROM CUSTOMER_360_DB.ENGINE.CUSTOMER_360 c
+      JOIN CUSTOMER_360_DB.ENGINE.CUSTOMER_STATE cs ON c.customer_id = cs.customer_id AND c.domain = cs.domain
+      WHERE cs.is_current = TRUE AND cs.state_name IN ('HIGH_CHURN_RISK', 'CRITICAL_CHURN_RISK')
+      ORDER BY cs.severity DESC, c.lifetime_value DESC
+
+  - name: action_effectiveness_summary
+    question: What is the effectiveness of each action?
+    verified_at: 1727308800
+    verified_by: system
+    sql: >
+      SELECT ae.action_id, ad.action_name, ae.state_id, sd.state_name, ae.domain_id,
+        ae.success_rate, ae.avg_uplift, ae.total_count, ae.confidence
+      FROM CUSTOMER_360_DB.ENGINE.ACTION_EFFECTIVENESS ae
+      JOIN CUSTOMER_360_DB.CONFIG.ACTION_DEFINITION ad ON ae.action_id = ad.action_id
+      JOIN CUSTOMER_360_DB.CONFIG.STATE_DEFINITION sd ON ae.state_id = sd.state_id
+      ORDER BY ae.success_rate DESC
+
+  - name: pending_decisions
+    question: What decisions are pending in the queue?
+    verified_at: 1727308800
+    verified_by: system
+    sql: >
+      SELECT q.customer_id, q.customer_name, q.state_name, q.urgency, q.severity, q.domain, q.created_at
+      FROM CUSTOMER_360_DB.ENGINE.DECISION_QUEUE q
+      WHERE q.status = 'PENDING'
+      ORDER BY q.severity DESC, q.created_at ASC
+
+  - name: value_at_risk
+    question: What is the total value at risk from high-risk customers?
+    verified_at: 1727308800
+    verified_by: system
+    sql: >
+      SELECT c.domain, cs.state_name, COUNT(*) AS customer_count,
+        SUM(c.total_relationship_value) AS total_value_at_risk,
+        AVG(c.lifetime_value) AS avg_lifetime_value
+      FROM CUSTOMER_360_DB.ENGINE.CUSTOMER_360 c
+      JOIN CUSTOMER_360_DB.ENGINE.CUSTOMER_STATE cs ON c.customer_id = cs.customer_id AND c.domain = cs.domain
+      WHERE cs.is_current = TRUE AND cs.severity >= 3
+      GROUP BY c.domain, cs.state_name
+      ORDER BY total_value_at_risk DESC
+
+  - name: portfolio_risk_distribution
+    question: How are customers distributed across risk levels?
+    verified_at: 1727308800
+    verified_by: system
+    sql: >
+      SELECT c.domain, cs.state_name, cs.severity, COUNT(*) AS customer_count,
+        SUM(c.lifetime_value) AS total_ltv
+      FROM CUSTOMER_360_DB.ENGINE.CUSTOMER_360 c
+      JOIN CUSTOMER_360_DB.ENGINE.CUSTOMER_STATE cs ON c.customer_id = cs.customer_id AND c.domain = cs.domain
+      WHERE cs.is_current = TRUE
+      GROUP BY c.domain, cs.state_name, cs.severity
+      ORDER BY c.domain, cs.severity DESC
