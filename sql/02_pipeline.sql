@@ -235,20 +235,61 @@ BEGIN
     FROM CANONICAL.INTERACTION i
     WHERE i.sentiment_score < 0 AND NOT EXISTS (SELECT 1 FROM ENGINE.SIGNAL s WHERE s.signal_instance_id = 'sig-sent-' || i.interaction_id);
 
-    -- Intent from transcripts (keyword fallback; replace with AI_COMPLETE on non-trial accounts)
+    -- Intent from transcripts — expanded keyword patterns
     INSERT INTO ENGINE.SIGNAL (signal_instance_id, customer_id, signal_id, signal_name, signal_value, numeric_value, confidence, evidence_ref, domain, extracted_at)
     SELECT 'sig-intent-' || e.event_id, e.customer_id,
         CASE WHEN e.domain = 'insurance' THEN 'ins_churn_intent' ELSE 'lend_hardship_intent' END,
         CASE WHEN e.domain = 'insurance' THEN 'churn_intent' ELSE 'hardship_intent' END,
         CASE
-            WHEN e.domain = 'insurance' AND (LOWER(e.event_data) LIKE '%cancel%' OR LOWER(e.event_data) LIKE '%switch%' OR LOWER(e.event_data) LIKE '%done%') THEN 'HIGH'
-            WHEN e.domain = 'insurance' AND (LOWER(e.event_data) LIKE '%considering%' OR LOWER(e.event_data) LIKE '%not renewing%') THEN 'MEDIUM'
-            WHEN e.domain = 'lending' AND (LOWER(e.event_data) LIKE '%lost%job%' OR LOWER(e.event_data) LIKE '%can''t make%') THEN 'HIGH'
-            WHEN e.domain = 'lending' AND (LOWER(e.event_data) LIKE '%trouble%' OR LOWER(e.event_data) LIKE '%struggling%') THEN 'MEDIUM'
+            WHEN e.domain = 'insurance' AND (
+                LOWER(e.event_data) LIKE '%cancel%'
+                OR LOWER(e.event_data) LIKE '%switch%'
+                OR LOWER(e.event_data) LIKE '%porting%'
+                OR LOWER(e.event_data) LIKE '%port to%'
+                OR LOWER(e.event_data) LIKE '%offered me%'
+                OR LOWER(e.event_data) LIKE '%competitor%'
+                OR LOWER(e.event_data) LIKE '%quote%'
+                OR LOWER(e.event_data) LIKE '%terminate%'
+                OR LOWER(e.event_data) LIKE '%done waiting%'
+                OR LOWER(e.event_data) LIKE '%done with%'
+                OR LOWER(e.event_data) LIKE '%irdai%'
+                OR LOWER(e.event_data) LIKE '%ombudsman%'
+                OR LOWER(e.event_data) LIKE '%formally complain%'
+                OR LOWER(e.event_data) LIKE '%legal action%'
+            ) THEN 'HIGH'
+            WHEN e.domain = 'insurance' AND (
+                LOWER(e.event_data) LIKE '%considering%'
+                OR LOWER(e.event_data) LIKE '%not renewing%'
+                OR LOWER(e.event_data) LIKE '%not happy%'
+                OR LOWER(e.event_data) LIKE '%dissatisfied%'
+                OR LOWER(e.event_data) LIKE '%frustrated%'
+                OR LOWER(e.event_data) LIKE '%unfair%'
+            ) THEN 'MEDIUM'
+            WHEN e.domain = 'lending' AND (
+                LOWER(e.event_data) LIKE '%lost%job%'
+                OR LOWER(e.event_data) LIKE '%can''t make%'
+                OR LOWER(e.event_data) LIKE '%can not make%'
+                OR LOWER(e.event_data) LIKE '%cannot make%'
+                OR LOWER(e.event_data) LIKE '%bankrupt%'
+                OR LOWER(e.event_data) LIKE '%defaulting%'
+            ) THEN 'HIGH'
+            WHEN e.domain = 'lending' AND (
+                LOWER(e.event_data) LIKE '%trouble%'
+                OR LOWER(e.event_data) LIKE '%struggling%'
+                OR LOWER(e.event_data) LIKE '%difficult%'
+                OR LOWER(e.event_data) LIKE '%tight%'
+            ) THEN 'MEDIUM'
             ELSE 'LOW'
         END,
-        CASE WHEN LOWER(e.event_data) LIKE '%cancel%' OR LOWER(e.event_data) LIKE '%lost%job%' THEN 1.0
-             WHEN LOWER(e.event_data) LIKE '%considering%' OR LOWER(e.event_data) LIKE '%trouble%' THEN 0.6 ELSE 0.3 END,
+        CASE
+            WHEN LOWER(e.event_data) LIKE '%cancel%' OR LOWER(e.event_data) LIKE '%porting%'
+                 OR LOWER(e.event_data) LIKE '%port to%' OR LOWER(e.event_data) LIKE '%offered me%'
+                 OR LOWER(e.event_data) LIKE '%lost%job%' OR LOWER(e.event_data) LIKE '%terminate%'
+                 OR LOWER(e.event_data) LIKE '%irdai%' OR LOWER(e.event_data) LIKE '%formally complain%' THEN 1.0
+            WHEN LOWER(e.event_data) LIKE '%considering%' OR LOWER(e.event_data) LIKE '%trouble%'
+                 OR LOWER(e.event_data) LIKE '%struggling%' OR LOWER(e.event_data) LIKE '%frustrated%' THEN 0.6
+            ELSE 0.3
+        END,
         0.75, 'transcript:' || e.event_id, e.domain, CURRENT_TIMESTAMP()
     FROM CANONICAL.EVENT e
     WHERE NOT EXISTS (SELECT 1 FROM ENGINE.SIGNAL s WHERE s.signal_instance_id = 'sig-intent-' || e.event_id);
@@ -285,37 +326,71 @@ BEGIN
     WHERE is_current = TRUE AND customer_id IN (SELECT DISTINCT customer_id FROM ENGINE.SIGNAL);
 
     INSERT INTO ENGINE.CUSTOMER_STATE (state_instance_id, customer_id, state_id, state_name, domain, severity, computed_score, effective_from, effective_to, is_current)
-    WITH signal_summary AS (
-        SELECT s.customer_id, s.domain,
-            MAX(CASE WHEN s.signal_name = 'churn_intent' THEN s.signal_value END) AS churn_intent,
-            MAX(CASE WHEN s.signal_name = 'hardship_intent' THEN s.signal_value END) AS hardship_intent,
-            MAX(CASE WHEN s.signal_name = 'negative_sentiment' THEN s.numeric_value END) AS negative_sentiment,
-            SUM(CASE WHEN s.signal_name = 'unresolved_claim' THEN s.numeric_value ELSE 0 END) AS unresolved_claim,
-            MIN(CASE WHEN s.signal_name = 'renewal_proximity' THEN s.numeric_value END) AS renewal_proximity,
-            MAX(CASE WHEN s.signal_name = 'delinquency' THEN s.numeric_value END) AS delinquency,
-            SUM(s.numeric_value * COALESCE(sd.weight, 1.0)) AS weighted_score
-        FROM ENGINE.SIGNAL s LEFT JOIN CONFIG.SIGNAL_DEFINITION sd ON s.signal_id = sd.signal_id
-        GROUP BY s.customer_id, s.domain
+    WITH severity_ranked_signals AS (
+        -- Resolve conflicting signals by severity rank then recency — never MAX() on label
+        SELECT s.customer_id, s.domain, s.signal_id, s.signal_name, s.signal_value, s.numeric_value, s.extracted_at,
+            ROW_NUMBER() OVER (
+                PARTITION BY s.customer_id, s.signal_name
+                ORDER BY
+                    CASE s.signal_value
+                        WHEN 'HIGH' THEN 3 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 1 ELSE 0
+                    END DESC,
+                    s.numeric_value DESC,
+                    s.extracted_at DESC
+            ) AS rn
+        FROM ENGINE.SIGNAL s
     ),
-    scored AS (
-        SELECT ss.customer_id, ss.domain, ss.weighted_score,
+    signal_summary AS (
+        SELECT sr.customer_id, sr.domain,
+            MAX(CASE WHEN sr.signal_name = 'churn_intent' THEN sr.signal_value END) AS churn_intent,
+            MAX(CASE WHEN sr.signal_name = 'hardship_intent' THEN sr.signal_value END) AS hardship_intent,
+            MAX(CASE WHEN sr.signal_name = 'negative_sentiment' THEN sr.numeric_value END) AS negative_sentiment,
+            SUM(CASE WHEN sr.signal_name = 'unresolved_claim' THEN sr.numeric_value ELSE 0 END) AS unresolved_claim,
+            MIN(CASE WHEN sr.signal_name = 'renewal_proximity' THEN sr.numeric_value END) AS renewal_proximity,
+            MAX(CASE WHEN sr.signal_name = 'delinquency' THEN sr.numeric_value END) AS delinquency,
+            MAX(CASE WHEN sr.signal_name = 'payment_risk' THEN sr.signal_value END) AS payment_risk,
+            SUM(sr.numeric_value * COALESCE(sd.weight, 1.0)) AS weighted_score
+        FROM severity_ranked_signals sr
+        LEFT JOIN CONFIG.SIGNAL_DEFINITION sd ON sr.signal_id = sd.signal_id
+        WHERE sr.rn = 1
+        GROUP BY sr.customer_id, sr.domain
+    ),
+    rule_evaluation AS (
+        -- Dynamically evaluate CONFIG.STATE_RULE ordered by priority DESC
+        SELECT ss.customer_id, ss.domain, ss.weighted_score, r.target_state_id, r.priority,
             CASE
-                WHEN ss.domain = 'insurance' AND ss.churn_intent = 'HIGH' AND ss.negative_sentiment > 0.8 AND ss.unresolved_claim > 0 THEN 'ins_critical_churn'
-                WHEN ss.domain = 'insurance' AND ss.churn_intent IN ('HIGH','MEDIUM') AND (ss.negative_sentiment > 0.6 OR ss.unresolved_claim > 0 OR ss.renewal_proximity < 30) THEN 'ins_high_churn'
-                WHEN ss.domain = 'insurance' AND (ss.negative_sentiment > 0.4 OR ss.unresolved_claim > 0 OR ss.renewal_proximity < 60) THEN 'ins_medium_churn'
-                WHEN ss.domain = 'insurance' THEN 'ins_low_churn'
-                WHEN ss.domain = 'lending' AND ss.hardship_intent = 'HIGH' AND ss.delinquency > 60 THEN 'lend_hardship'
-                WHEN ss.domain = 'lending' AND (ss.hardship_intent IN ('HIGH','MEDIUM') OR ss.delinquency > 30) THEN 'lend_high_risk'
-                WHEN ss.domain = 'lending' AND (ss.negative_sentiment > 0.5 OR ss.delinquency > 0) THEN 'lend_medium_risk'
-                WHEN ss.domain = 'lending' THEN 'lend_low_risk'
-            END AS computed_state_id
+                WHEN r.domain_id = 'insurance' AND r.priority = 4
+                    AND ss.churn_intent = 'HIGH' AND ss.negative_sentiment > 0.8 AND ss.unresolved_claim > 0 THEN TRUE
+                WHEN r.domain_id = 'insurance' AND r.priority = 3
+                    AND ss.churn_intent IN ('HIGH','MEDIUM') AND (ss.negative_sentiment > 0.6 OR ss.unresolved_claim > 0 OR ss.renewal_proximity < 30) THEN TRUE
+                WHEN r.domain_id = 'insurance' AND r.priority = 2
+                    AND (ss.negative_sentiment > 0.4 OR ss.unresolved_claim > 0 OR ss.renewal_proximity < 60) THEN TRUE
+                WHEN r.domain_id = 'insurance' AND r.priority = 1 THEN TRUE
+                WHEN r.domain_id = 'lending' AND r.priority = 4
+                    AND ss.hardship_intent = 'HIGH' AND ss.delinquency > 60 THEN TRUE
+                WHEN r.domain_id = 'lending' AND r.priority = 3
+                    AND (ss.payment_risk = 'HIGH' OR ss.delinquency > 30 OR ss.hardship_intent IN ('HIGH','MEDIUM')) THEN TRUE
+                WHEN r.domain_id = 'lending' AND r.priority = 2
+                    AND (ss.payment_risk = 'MEDIUM' OR ss.delinquency > 0 OR ss.negative_sentiment > 0.5) THEN TRUE
+                WHEN r.domain_id = 'lending' AND r.priority = 1 THEN TRUE
+                ELSE FALSE
+            END AS rule_matches
         FROM signal_summary ss
+        JOIN CONFIG.STATE_RULE r ON ss.domain = r.domain_id AND r.active = TRUE
+    ),
+    best_match AS (
+        -- Pick highest-priority matching rule per customer
+        SELECT re.customer_id, re.domain, re.weighted_score, re.target_state_id
+        FROM rule_evaluation re
+        WHERE re.rule_matches = TRUE
+        QUALIFY ROW_NUMBER() OVER (PARTITION BY re.customer_id ORDER BY re.priority DESC) = 1
     )
-    SELECT 'state-' || sc.customer_id || '-' || TO_VARCHAR(CURRENT_TIMESTAMP(), 'YYYYMMDDHH24MISSFF3'),
-        sc.customer_id, sc.computed_state_id, sd.state_name, sc.domain, sd.severity,
-        sc.weighted_score, CURRENT_TIMESTAMP(), '9999-12-31'::TIMESTAMP_NTZ, TRUE
-    FROM scored sc JOIN CONFIG.STATE_DEFINITION sd ON sc.computed_state_id = sd.state_id
-    WHERE NOT EXISTS (SELECT 1 FROM ENGINE.CUSTOMER_STATE cs WHERE cs.customer_id = sc.customer_id AND cs.is_current = TRUE);
+    SELECT 'state-' || bm.customer_id || '-' || TO_VARCHAR(CURRENT_TIMESTAMP(), 'YYYYMMDDHH24MISSFF3'),
+        bm.customer_id, bm.target_state_id, sd.state_name, bm.domain, sd.severity,
+        bm.weighted_score, CURRENT_TIMESTAMP(), '9999-12-31'::TIMESTAMP_NTZ, TRUE
+    FROM best_match bm
+    JOIN CONFIG.STATE_DEFINITION sd ON bm.target_state_id = sd.state_id
+    WHERE NOT EXISTS (SELECT 1 FROM ENGINE.CUSTOMER_STATE cs WHERE cs.customer_id = bm.customer_id AND cs.is_current = TRUE);
 
     RETURN 'States computed successfully';
 END;

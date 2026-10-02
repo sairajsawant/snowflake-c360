@@ -181,11 +181,11 @@ BEGIN
     IF (NOT :v_requires_approval AND :v_action_type = 'AUTONOMOUS') THEN
         RETURN 'AUTONOMOUS: Action can be executed automatically.';
     ELSEIF (:v_requires_approval AND :v_can_approve AND :v_approval_threshold <= :v_max_approval) THEN
-        RETURN 'REQUIRES_APPROVAL: Persona ' || :P_PERSONA || ' can approve up to $' || :v_max_approval::VARCHAR || '.';
+        RETURN 'REQUIRES_APPROVAL: Persona ' || :P_PERSONA || ' can approve up to ₹' || :v_max_approval::VARCHAR || '.';
     ELSEIF (:v_requires_approval AND NOT :v_can_approve) THEN
         RETURN 'BLOCKED: Persona ' || :P_PERSONA || ' cannot approve actions. Escalate to team_lead or vp_executive.';
     ELSEIF (:v_requires_approval AND :v_approval_threshold > :v_max_approval) THEN
-        RETURN 'BLOCKED: Threshold $' || :v_approval_threshold::VARCHAR || ' exceeds limit $' || :v_max_approval::VARCHAR || '.';
+        RETURN 'BLOCKED: Threshold ₹' || :v_approval_threshold::VARCHAR || ' exceeds limit ₹' || :v_max_approval::VARCHAR || '.';
     ELSE
         RETURN 'MANUAL: Action requires manual execution.';
     END IF;
