@@ -1,9 +1,9 @@
 -- =============================================================================
--- APP_V2 decisioning, action and learning.
+-- APP decisioning, action and learning.
 --
 -- RECOMMEND_ACTION here replaces the broken APP.RECOMMEND_ACTION. Differences
 -- that matter:
---   * reads SCORING_CONFIG in its real long format via CUSTOMER_360_DB.APP_V2.V_SCORING,
+--   * reads SCORING_CONFIG in its real long format via CUSTOMER_360_DB.APP.V_SCORING,
 --     falling back to the 'default' persona when a persona has no rows
 --     (APP's CROSS JOIN ... LIMIT 1 returns zero rows for team_lead/analyst,
 --      so it would silently recommend nothing);
@@ -16,7 +16,7 @@
 --     (APP subtracts it, which makes a more expensive action score higher).
 -- =============================================================================
 USE DATABASE CUSTOMER_360_DB;
-USE SCHEMA APP_V2;
+USE SCHEMA APP;
 
 CREATE OR REPLACE PROCEDURE RECOMMEND_ACTION(
     P_CUSTOMER_ID VARCHAR, P_PERSONA VARCHAR, P_OFFER_AMOUNT FLOAT)
@@ -38,9 +38,9 @@ BEGIN
             SELECT cs.customer_id, cs.state_id, cs.domain,
                    rv.relationship_value, cc.cost_ceiling
             FROM CUSTOMER_360_DB.ENGINE.CUSTOMER_STATE cs
-            JOIN CUSTOMER_360_DB.APP_V2.V_RELATIONSHIP_VALUE rv
+            JOIN CUSTOMER_360_DB.APP.V_RELATIONSHIP_VALUE rv
               ON rv.customer_id = cs.customer_id AND rv.domain = cs.domain
-            JOIN CUSTOMER_360_DB.APP_V2.V_COST_CEILING cc ON cc.domain_id = cs.domain
+            JOIN CUSTOMER_360_DB.APP.V_COST_CEILING cc ON cc.domain_id = cs.domain
             WHERE cs.customer_id = :P_CUSTOMER_ID AND cs.is_current = TRUE
         ),
         wts AS (   -- persona weights, else the domain default
@@ -50,8 +50,8 @@ BEGIN
                 COALESCE(p.w_cost,   d.w_cost)   AS w_cost,
                 COALESCE(p.w_conf,   d.w_conf)   AS w_conf
             FROM ctx c
-            LEFT JOIN CUSTOMER_360_DB.APP_V2.V_SCORING p ON p.domain_id = c.domain AND p.persona = :P_PERSONA
-            LEFT JOIN CUSTOMER_360_DB.APP_V2.V_SCORING d ON d.domain_id = c.domain AND d.persona = 'default'
+            LEFT JOIN CUSTOMER_360_DB.APP.V_SCORING p ON p.domain_id = c.domain AND p.persona = :P_PERSONA
+            LEFT JOIN CUSTOMER_360_DB.APP.V_SCORING d ON d.domain_id = c.domain AND d.persona = 'default'
         ),
         cand AS (
             SELECT ad.action_id, ad.action_name, ad.action_type, ad.requires_approval,
@@ -176,7 +176,7 @@ $$
                                   THEN TRUE ELSE FALSE END
     )
     FROM CUSTOMER_360_DB.CONFIG.ACTION_DEFINITION ad
-    CROSS JOIN CUSTOMER_360_DB.APP_V2.PERSONA_LIMIT pl
+    CROSS JOIN CUSTOMER_360_DB.APP.PERSONA_LIMIT pl
     CROSS JOIN CUSTOMER_360_DB.CONFIG.USER_PERSONA up
     WHERE ad.action_id = P_ACTION_ID AND pl.persona_id = P_PERSONA AND up.persona_id = P_PERSONA
 $$;
@@ -209,7 +209,7 @@ BEGIN
     v_prev_state := (SELECT state_name FROM CUSTOMER_360_DB.ENGINE.CUSTOMER_STATE
                      WHERE customer_id = :P_CUSTOMER_ID AND is_current = FALSE
                      ORDER BY effective_to DESC LIMIT 1);
-    v_auth := CUSTOMER_360_DB.APP_V2.AUTHORITY_CHECK(:P_ACTION_ID, :P_PERSONA, :P_OFFER_AMOUNT);
+    v_auth := CUSTOMER_360_DB.APP.AUTHORITY_CHECK(:P_ACTION_ID, :P_PERSONA, :P_OFFER_AMOUNT);
 
     IF (v_auth:authorised::BOOLEAN = FALSE) THEN
         RETURN OBJECT_CONSTRUCT('status','BLOCKED',
@@ -220,7 +220,7 @@ BEGIN
     END IF;
 
     -- recommendation row (what we decided, and why)
-    v_rec := 'rec-v2-' || :P_CUSTOMER_ID || '-' || :v_stamp;
+    v_rec := 'rec-x-' || :P_CUSTOMER_ID || '-' || :v_stamp;
     INSERT INTO CUSTOMER_360_DB.ENGINE.ACTION_RECOMMENDATION (recommendation_id, customer_id, queue_id, action_id,
         action_name, domain, score, effectiveness_rate, expected_uplift, expected_value,
         action_cost, confidence, ranking, requires_approval, status, created_at)
@@ -229,7 +229,7 @@ BEGIN
            AND status='PENDING' ORDER BY created_at DESC LIMIT 1),
         :P_ACTION_ID, :v_action_name, :v_dom,
         COALESCE(ae.success_rate,0.3), COALESCE(ae.success_rate,0.3), COALESCE(ae.avg_uplift,0.05),
-        (SELECT relationship_value FROM CUSTOMER_360_DB.APP_V2.V_RELATIONSHIP_VALUE
+        (SELECT relationship_value FROM CUSTOMER_360_DB.APP.V_RELATIONSHIP_VALUE
            WHERE customer_id=:P_CUSTOMER_ID AND domain=:v_dom) * COALESCE(ae.success_rate,0.3) * COALESCE(ae.avg_uplift,0.05),
         ad.default_cost + CASE WHEN ad.requires_approval THEN COALESCE(:P_OFFER_AMOUNT,0) ELSE 0 END,
         COALESCE(ae.confidence,0.4), 1, ad.requires_approval, 'EXECUTED', CURRENT_TIMESTAMP()
@@ -239,7 +239,7 @@ BEGIN
     WHERE ad.action_id = :P_ACTION_ID;
 
     -- execution row
-    v_exec := 'exec-v2-' || :P_CUSTOMER_ID || '-' || :v_stamp;
+    v_exec := 'exec-x-' || :P_CUSTOMER_ID || '-' || :v_stamp;
     INSERT INTO CUSTOMER_360_DB.ENGINE.ACTION_EXECUTION (execution_id, recommendation_id, customer_id, action_id,
         action_name, domain, execution_type, executed_by, approved_by, execution_notes, status, executed_at)
     VALUES (:v_exec, :v_rec, :P_CUSTOMER_ID, :P_ACTION_ID, :v_action_name, :v_dom,
@@ -258,7 +258,7 @@ BEGIN
             UPDATE CUSTOMER_360_DB.RAW.INSURANCE_CLAIMS SET claim_status='PRIORITY', updated_at=CURRENT_TIMESTAMP()
             WHERE claim_id = :v_claim;
             v_side := 'claim ' || :v_claim || ' set to PRIORITY';
-            INSERT INTO CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT (run_id, object_type, object_id, detail)
+            INSERT INTO CUSTOMER_360_DB.APP.RUN_ARTIFACT (run_id, object_type, object_id, detail)
             VALUES (:P_RUN_ID,'CLAIM_STATUS', :v_claim, 'PENDING -> PRIORITY');
         END IF;
     END IF;
@@ -271,17 +271,17 @@ BEGIN
                    '{{top_action}}',    :v_action_name)
               FROM CUSTOMER_360_DB.CONFIG.NOTIFICATION_RULE nr
               WHERE nr.domain_id=:v_dom AND nr.active=TRUE ORDER BY nr.rule_id LIMIT 1);
-    v_log := 'log-v2-' || :P_CUSTOMER_ID || '-' || :v_stamp;
+    v_log := 'log-x-' || :P_CUSTOMER_ID || '-' || :v_stamp;
     INSERT INTO CUSTOMER_360_DB.ENGINE.NOTIFICATION_LOG (log_id, channel_id, channel_type, event_type,
         customer_id, domain, message, status, sent_at)
     VALUES (:v_log, 'ch_email', 'EMAIL', 'ACTION_EXECUTED', :P_CUSTOMER_ID, :v_dom,
         COALESCE(:v_msg, :v_action_name || ' executed for ' || :v_name), 'RENDERED', CURRENT_TIMESTAMP());
 
-    INSERT INTO CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT (run_id, object_type, object_id, detail)
+    INSERT INTO CUSTOMER_360_DB.APP.RUN_ARTIFACT (run_id, object_type, object_id, detail)
       VALUES (:P_RUN_ID,'RECOMMENDATION', :v_rec, :v_action_name);
-    INSERT INTO CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT (run_id, object_type, object_id, detail)
+    INSERT INTO CUSTOMER_360_DB.APP.RUN_ARTIFACT (run_id, object_type, object_id, detail)
       VALUES (:P_RUN_ID,'EXECUTION', :v_exec, :v_side);
-    INSERT INTO CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT (run_id, object_type, object_id, detail)
+    INSERT INTO CUSTOMER_360_DB.APP.RUN_ARTIFACT (run_id, object_type, object_id, detail)
       VALUES (:P_RUN_ID,'NOTIFICATION', :v_log, NULL);
 
     RETURN OBJECT_CONSTRUCT('status','EXECUTED','execution_id',:v_exec,
@@ -290,4 +290,4 @@ BEGIN
 END;
 $$;
 
-SELECT 'APP_V2 decisioning procedures created' AS status;
+SELECT 'APP decisioning procedures created' AS status;

@@ -11,7 +11,7 @@
 -- the CLI and from other procedures); these are what the Streamlit app reads.
 -- =============================================================================
 USE DATABASE CUSTOMER_360_DB;
-USE SCHEMA APP_V2;
+USE SCHEMA APP;
 
 CREATE OR REPLACE FUNCTION RECOMMEND(
     P_CUSTOMER_ID VARCHAR, P_PERSONA VARCHAR, P_OFFER_AMOUNT FLOAT)
@@ -28,9 +28,9 @@ WITH ctx AS (
     SELECT cs.customer_id, cs.state_id, cs.domain,
            rv.relationship_value, cc.cost_ceiling
     FROM CUSTOMER_360_DB.ENGINE.CUSTOMER_STATE cs
-    JOIN CUSTOMER_360_DB.APP_V2.V_RELATIONSHIP_VALUE rv
+    JOIN CUSTOMER_360_DB.APP.V_RELATIONSHIP_VALUE rv
       ON rv.customer_id = cs.customer_id AND rv.domain = cs.domain
-    JOIN CUSTOMER_360_DB.APP_V2.V_COST_CEILING cc ON cc.domain_id = cs.domain
+    JOIN CUSTOMER_360_DB.APP.V_COST_CEILING cc ON cc.domain_id = cs.domain
     WHERE cs.customer_id = P_CUSTOMER_ID AND cs.is_current = TRUE
 ),
 wts AS (
@@ -40,9 +40,9 @@ wts AS (
         COALESCE(p.w_cost,   d.w_cost)   AS w_cost,
         COALESCE(p.w_conf,   d.w_conf)   AS w_conf
     FROM ctx c
-    LEFT JOIN CUSTOMER_360_DB.APP_V2.V_SCORING p
+    LEFT JOIN CUSTOMER_360_DB.APP.V_SCORING p
            ON p.domain_id = c.domain AND p.persona = P_PERSONA
-    LEFT JOIN CUSTOMER_360_DB.APP_V2.V_SCORING d
+    LEFT JOIN CUSTOMER_360_DB.APP.V_SCORING d
            ON d.domain_id = c.domain AND d.persona = 'default'
 ),
 cand AS (
@@ -146,13 +146,13 @@ SELECT s.signal_name, s.signal_value, s.numeric_value, s.confidence,
        e.quote,
        CASE WHEN e.model = 'AI_SENTIMENT' THEN 'AI_SENTIMENT' ELSE 'AI_COMPLETE' END
 FROM CUSTOMER_360_DB.ENGINE.SIGNAL s
-LEFT JOIN CUSTOMER_360_DB.APP_V2.SIGNAL_EVIDENCE e
+LEFT JOIN CUSTOMER_360_DB.APP.SIGNAL_EVIDENCE e
        ON e.signal_instance_id = s.signal_instance_id
 WHERE s.customer_id = P_CUSTOMER_ID
   AND s.evidence_ref = 'transcript:' || P_TRANSCRIPT_ID
 ORDER BY s.signal_name
 $$;
 
-GRANT USAGE ON ALL FUNCTIONS IN SCHEMA CUSTOMER_360_DB.APP_V2 TO ROLE C360_JUDGE;
+GRANT USAGE ON ALL FUNCTIONS IN SCHEMA CUSTOMER_360_DB.APP TO ROLE C360_JUDGE;
 
-SELECT 'APP_V2 table functions created' AS status;
+SELECT 'APP table functions created' AS status;

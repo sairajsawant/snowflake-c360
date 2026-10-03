@@ -1,17 +1,13 @@
 -- =============================================================================
--- A Cortex Search service over the CURRENT customer book.
+-- A Cortex Search service over the current customer book.
 --
--- SEARCH.INTERACTION_DOCUMENTS still holds the 60 pre-migration documents
--- (C1023 "Sarah Chen" and friends), so SEARCH.CUSTOMER_INTERACTION_SEARCH
--- returns customers who no longer exist. Rather than overwrite a table the
--- original app also reads, v2 builds its own corpus from CANONICAL.INTERACTION
--- and the live transcripts, and searches that.
---
--- The corpus is a dynamic table, so a transcript injected during a scenario run
--- becomes searchable without anyone rebuilding anything.
+-- Built from CANONICAL.INTERACTION plus the live transcripts, tickets and
+-- email, not from a hand-seeded document table — so it never drifts from the
+-- real customer set. The corpus is a dynamic table, so a transcript injected
+-- during a scenario run becomes searchable without anyone rebuilding anything.
 -- =============================================================================
 USE DATABASE CUSTOMER_360_DB;
-USE SCHEMA APP_V2;
+USE SCHEMA APP;
 
 CREATE OR REPLACE DYNAMIC TABLE INTERACTION_CORPUS
   TARGET_LAG = '1 minute'
@@ -95,7 +91,7 @@ SELECT
 FROM CUSTOMER_360_DB.RAW.SUPPORT_TICKET t
 JOIN CUSTOMER_360_DB.CANONICAL.CUSTOMER c ON c.customer_id = t.customer_id;
 
-CREATE OR REPLACE CORTEX SEARCH SERVICE INTERACTION_SEARCH_V2
+CREATE OR REPLACE CORTEX SEARCH SERVICE INTERACTION_SEARCH
   ON content
   ATTRIBUTES customer_id, customer_name, domain, channel, interaction_type, subject
   WAREHOUSE = COMPUTE_WH
@@ -103,9 +99,9 @@ CREATE OR REPLACE CORTEX SEARCH SERVICE INTERACTION_SEARCH_V2
 AS
   SELECT doc_id, customer_id, customer_name, domain, channel,
          interaction_type, subject, content, interaction_date
-  FROM CUSTOMER_360_DB.APP_V2.INTERACTION_CORPUS;
+  FROM CUSTOMER_360_DB.APP.INTERACTION_CORPUS;
 
-GRANT SELECT ON DYNAMIC TABLE CUSTOMER_360_DB.APP_V2.INTERACTION_CORPUS TO ROLE C360_JUDGE;
-GRANT USAGE ON CORTEX SEARCH SERVICE CUSTOMER_360_DB.APP_V2.INTERACTION_SEARCH_V2 TO ROLE C360_JUDGE;
+GRANT SELECT ON DYNAMIC TABLE CUSTOMER_360_DB.APP.INTERACTION_CORPUS TO ROLE C360_JUDGE;
+GRANT USAGE ON CORTEX SEARCH SERVICE CUSTOMER_360_DB.APP.INTERACTION_SEARCH TO ROLE C360_JUDGE;
 
-SELECT 'APP_V2 search service created' AS status;
+SELECT 'APP search service created' AS status;

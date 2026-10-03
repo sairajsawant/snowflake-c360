@@ -1,8 +1,8 @@
 """
-Every Snowflake call the v2 app makes.
+Every Snowflake call the app makes.
 
 Nothing here is simulated. Reads hit CANONICAL / ENGINE / CONFIG / RAW directly;
-writes and AI go through the APP_V2 procedures. Parameters are bound rather than
+writes and AI go through the APP procedures. Parameters are bound rather than
 interpolated, which matters because transcripts contain quotes and apostrophes.
 """
 import json
@@ -52,7 +52,7 @@ def customers():
                cs.state_id, cs.state_name, cs.severity, cs.computed_score,
                ca.assigned_user, ca.assigned_team
         FROM {DB}.CANONICAL.CUSTOMER c
-        LEFT JOIN {DB}.APP_V2.V_RELATIONSHIP_VALUE rv
+        LEFT JOIN {DB}.APP.V_RELATIONSHIP_VALUE rv
                ON rv.customer_id = c.customer_id AND rv.domain = c.domain
         LEFT JOIN {DB}.ENGINE.CUSTOMER_STATE cs
                ON cs.customer_id = c.customer_id AND cs.is_current = TRUE
@@ -94,14 +94,14 @@ def personas():
                up.can_configure, up.max_approval_value AS config_limit,
                pl.max_approval_inr AS effective_limit, pl.note
         FROM {DB}.CONFIG.USER_PERSONA up
-        JOIN {DB}.APP_V2.PERSONA_LIMIT pl ON pl.persona_id = up.persona_id
+        JOIN {DB}.APP.PERSONA_LIMIT pl ON pl.persona_id = up.persona_id
         ORDER BY pl.max_approval_inr
     """)
 
 
 @st.cache_data(ttl=300, show_spinner=False)
 def scoring_weights():
-    return _df(f"SELECT * FROM {DB}.APP_V2.V_SCORING ORDER BY domain_id, persona")
+    return _df(f"SELECT * FROM {DB}.APP.V_SCORING ORDER BY domain_id, persona")
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -126,12 +126,12 @@ def customer(cid):
 
 
 def signals(cid, resolved_only=False):
-    view = "APP_V2.V_SIGNAL_RESOLVED" if resolved_only else "ENGINE.SIGNAL"
+    view = "APP.V_SIGNAL_RESOLVED" if resolved_only else "ENGINE.SIGNAL"
     return _df(f"""
         SELECT s.signal_name, s.signal_value, s.numeric_value, s.confidence,
                s.evidence_ref, s.extracted_at, e.quote, e.model
         FROM {DB}.{view} s
-        LEFT JOIN {DB}.APP_V2.SIGNAL_EVIDENCE e
+        LEFT JOIN {DB}.APP.SIGNAL_EVIDENCE e
                ON e.signal_instance_id = s.signal_instance_id
         WHERE s.customer_id = ?
         ORDER BY s.signal_name, s.extracted_at DESC
@@ -143,7 +143,7 @@ def signals(cid, resolved_only=False):
 
 
 def resolved_wide(cid):
-    return _df(f"SELECT * FROM {DB}.APP_V2.V_SIGNAL_WIDE WHERE customer_id = ?", [cid])
+    return _df(f"SELECT * FROM {DB}.APP.V_SIGNAL_WIDE WHERE customer_id = ?", [cid])
 
 
 def products(cid, domain):
@@ -207,7 +207,7 @@ def queue(persona_scope, assigned_user="agent_rm_1", team="team_alpha"):
         FROM {DB}.CANONICAL.CUSTOMER c
         JOIN {DB}.ENGINE.CUSTOMER_STATE cs
              ON cs.customer_id = c.customer_id
-        LEFT JOIN {DB}.APP_V2.V_RELATIONSHIP_VALUE rv
+        LEFT JOIN {DB}.APP.V_RELATIONSHIP_VALUE rv
              ON rv.customer_id = c.customer_id AND rv.domain = c.domain
         LEFT JOIN {DB}.CONFIG.CUSTOMER_ASSIGNMENT ca
              ON ca.customer_id = c.customer_id AND ca.domain = c.domain
@@ -232,7 +232,7 @@ def portfolio():
         SELECT cs.domain, cs.state_name, cs.severity, COUNT(*) AS customers,
                SUM(rv.relationship_value) AS total_value
         FROM {DB}.ENGINE.CUSTOMER_STATE cs
-        JOIN {DB}.APP_V2.V_RELATIONSHIP_VALUE rv
+        JOIN {DB}.APP.V_RELATIONSHIP_VALUE rv
              ON rv.customer_id = cs.customer_id AND rv.domain = cs.domain
         WHERE cs.is_current = TRUE
         GROUP BY cs.domain, cs.state_name, cs.severity
@@ -259,23 +259,23 @@ def pipeline_health():
 
 # ── procedure calls: the write and AI paths ───────────────────────────────────
 def start_run(cid, persona, scenario):
-    return _scalar(f"CALL {DB}.APP_V2.START_RUN(?, ?, ?)", [cid, persona, scenario])
+    return _scalar(f"CALL {DB}.APP.START_RUN(?, ?, ?)", [cid, persona, scenario])
 
 
 def generate_transcript(cid, situation, intensity, channel):
-    return _scalar(f"CALL {DB}.APP_V2.GENERATE_TRANSCRIPT(?, ?, ?, ?)",
+    return _scalar(f"CALL {DB}.APP.GENERATE_TRANSCRIPT(?, ?, ?, ?)",
                    [cid, situation, intensity, channel])
 
 
 def inject_event(cid, transcript, run_id):
-    return _scalar(f"CALL {DB}.APP_V2.INJECT_EVENT(?, ?, ?)", [cid, transcript, run_id])
+    return _scalar(f"CALL {DB}.APP.INJECT_EVENT(?, ?, ?)", [cid, transcript, run_id])
 
 
 def extract_signals(cid, transcript_id, run_id):
     """Run the extraction, then read the rows back through a table function."""
-    session().sql(f"CALL {DB}.APP_V2.EXTRACT_SIGNALS_FOR(?, ?, ?)",
+    session().sql(f"CALL {DB}.APP.EXTRACT_SIGNALS_FOR(?, ?, ?)",
                   params=[cid, transcript_id, run_id]).collect()
-    return _df(f"""SELECT * FROM TABLE({DB}.APP_V2.SIGNALS_FOR_TRANSCRIPT(
+    return _df(f"""SELECT * FROM TABLE({DB}.APP.SIGNALS_FOR_TRANSCRIPT(
                        {_lit(cid)}, {_lit(transcript_id)}))""")
 
 
@@ -286,7 +286,7 @@ def compute_state(cid, run_id):
     """
     before = _scalar(f"""SELECT state_name FROM {DB}.ENGINE.CUSTOMER_STATE
                          WHERE customer_id = ? AND is_current = TRUE""", [cid])
-    session().sql(f"CALL {DB}.APP_V2.COMPUTE_STATE_FOR(?, ?)",
+    session().sql(f"CALL {DB}.APP.COMPUTE_STATE_FOR(?, ?)",
                   params=[cid, run_id]).collect()
     row = _df(f"""SELECT state_name, severity, computed_score
                   FROM {DB}.ENGINE.CUSTOMER_STATE
@@ -297,58 +297,58 @@ def compute_state(cid, run_id):
 
 
 def summarize(cid, run_id):
-    return _scalar(f"CALL {DB}.APP_V2.SUMMARIZE_CUSTOMER(?, ?)", [cid, run_id])
+    return _scalar(f"CALL {DB}.APP.SUMMARIZE_CUSTOMER(?, ?)", [cid, run_id])
 
 
 def recommend(cid, persona, offer=0):
-    return _df(f"""SELECT * FROM TABLE({DB}.APP_V2.RECOMMEND(
+    return _df(f"""SELECT * FROM TABLE({DB}.APP.RECOMMEND(
                        {_lit(cid)}, {_lit(persona)}, {float(offer)}::FLOAT))""")
 
 
 def policy_eval(cid, action_id, persona, offer=0):
-    return _df(f"""SELECT * FROM TABLE({DB}.APP_V2.POLICY_CHECK_TABLE(
+    return _df(f"""SELECT * FROM TABLE({DB}.APP.POLICY_CHECK_TABLE(
                        {_lit(action_id)}, {_lit(persona)}, {float(offer)}::FLOAT))""")
 
 
 def authority(action_id, persona, offer=0):
-    return _obj(f"""SELECT {DB}.APP_V2.AUTHORITY_CHECK(
+    return _obj(f"""SELECT {DB}.APP.AUTHORITY_CHECK(
                         {_lit(action_id)}, {_lit(persona)}, {float(offer)}::FLOAT)""")
 
 
 def execute_action(cid, action_id, persona, offer, notes, run_id):
-    return _obj(f"CALL {DB}.APP_V2.EXECUTE_ACTION(?, ?, ?, ?, ?, ?)",
+    return _obj(f"CALL {DB}.APP.EXECUTE_ACTION(?, ?, ?, ?, ?, ?)",
                 [cid, action_id, persona, float(offer), notes, run_id])
 
 
 def call_brief(cid, action_id, offer=0):
-    return _scalar(f"CALL {DB}.APP_V2.CALL_BRIEF(?, ?, ?)", [cid, action_id, float(offer)])
+    return _scalar(f"CALL {DB}.APP.CALL_BRIEF(?, ?, ?)", [cid, action_id, float(offer)])
 
 
 def simulate_call(cid, action_id, offer, tone):
-    return _obj(f"CALL {DB}.APP_V2.SIMULATE_CALL(?, ?, ?, ?)",
+    return _obj(f"CALL {DB}.APP.SIMULATE_CALL(?, ?, ?, ?)",
                 [cid, action_id, float(offer), tone])
 
 
 def record_outcome(cid, action_id, outcome, state_after, run_id):
-    return _obj(f"CALL {DB}.APP_V2.RECORD_OUTCOME(?, ?, ?, ?, ?)",
+    return _obj(f"CALL {DB}.APP.RECORD_OUTCOME(?, ?, ?, ?, ?)",
                 [cid, action_id, outcome, state_after, run_id])
 
 
 def undo_run(run_id):
-    return _scalar(f"CALL {DB}.APP_V2.UNDO_RUN(?)", [run_id])
+    return _scalar(f"CALL {DB}.APP.UNDO_RUN(?)", [run_id])
 
 
 def open_runs():
     return _df(f"""
         SELECT run_id, customer_id, persona, scenario, started_at
-        FROM {DB}.APP_V2.RUN_LOG WHERE status = 'OPEN' ORDER BY started_at DESC
+        FROM {DB}.APP.RUN_LOG WHERE status = 'OPEN' ORDER BY started_at DESC
     """)
 
 
 def run_artifacts(run_id):
     return _df(f"""
         SELECT object_type, object_id, detail, created_at
-        FROM {DB}.APP_V2.RUN_ARTIFACT WHERE run_id = ? ORDER BY created_at
+        FROM {DB}.APP.RUN_ARTIFACT WHERE run_id = ? ORDER BY created_at
     """, [run_id])
 
 
@@ -366,7 +366,7 @@ def search_interactions(query, limit=5):
     })
     sql = f"""
         SELECT PARSE_JSON(SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
-            '{DB}.APP_V2.INTERACTION_SEARCH_V2',
+            '{DB}.APP.INTERACTION_SEARCH',
             '{payload.replace("'", "''")}')) AS r
     """
     try:
@@ -384,19 +384,19 @@ def clear_caches():
 # ── profile, timeline and the new sources ────────────────────────────────────
 def profile(cid):
     """One row with everything the engine reasons over for this customer."""
-    df = _df(f"SELECT * FROM {DB}.APP_V2.V_CUSTOMER_PROFILE WHERE customer_id = ?", [cid])
+    df = _df(f"SELECT * FROM {DB}.APP.V_CUSTOMER_PROFILE WHERE customer_id = ?", [cid])
     return None if df.empty else df.iloc[0]
 
 
 def why_this_state(cid):
     """Every signal behind the current state, with what each one contributes."""
-    return _df(f"SELECT * FROM TABLE({DB}.APP_V2.WHY_THIS_STATE({_lit(cid)}))")
+    return _df(f"SELECT * FROM TABLE({DB}.APP.WHY_THIS_STATE({_lit(cid)}))")
 
 
 def all_signals(cid):
     return _df(f"""
         SELECT signal_name, signal_value, numeric_value, confidence, evidence_ref, origin
-        FROM {DB}.APP_V2.V_ALL_SIGNALS WHERE customer_id = ?
+        FROM {DB}.APP.V_ALL_SIGNALS WHERE customer_id = ?
         ORDER BY origin, signal_name
     """, [cid])
 

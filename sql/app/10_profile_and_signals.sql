@@ -19,7 +19,7 @@
 --   group_exposure   decision-maker leverage  — HR owns the renewal
 -- =============================================================================
 USE DATABASE CUSTOMER_360_DB;
-USE SCHEMA APP_V2;
+USE SCHEMA APP;
 
 -- ─── The profile: one row per customer, everything the engine reasons over ──
 CREATE OR REPLACE VIEW V_CUSTOMER_PROFILE AS
@@ -135,7 +135,7 @@ SELECT c.customer_id, c.full_name, c.domain, c.segment, c.region,
        cl.claims_total, cl.claims_open, cl.claims_rejected, cl.claims_value,
        cl.oldest_claim_age_days
 FROM CUSTOMER_360_DB.CANONICAL.CUSTOMER c
-LEFT JOIN CUSTOMER_360_DB.APP_V2.V_RELATIONSHIP_VALUE rv
+LEFT JOIN CUSTOMER_360_DB.APP.V_RELATIONSHIP_VALUE rv
        ON rv.customer_id = c.customer_id AND rv.domain = c.domain
 LEFT JOIN CUSTOMER_360_DB.ENGINE.CUSTOMER_STATE cs
        ON cs.customer_id = c.customer_id AND cs.is_current = TRUE
@@ -218,21 +218,23 @@ WHERE signal_value <> 'NONE';
 
 
 -- Register the new signals so they appear in config exactly like the originals.
-DELETE FROM CUSTOMER_360_DB.CONFIG.SIGNAL_DEFINITION WHERE signal_id LIKE 'ins_v2_%';
+DELETE FROM CUSTOMER_360_DB.CONFIG.SIGNAL_DEFINITION WHERE signal_id IN (
+    'ins_x_grievance','ins_x_portability','ins_x_service','ins_x_reopen','ins_x_csat',
+    'ins_x_renewal','ins_x_downgrade','ins_x_claimfric','ins_x_group','ins_x_emailtone');
 INSERT INTO CUSTOMER_360_DB.CONFIG.SIGNAL_DEFINITION
     (signal_id, domain_id, signal_name, signal_type, extraction_method,
      extraction_prompt, source_table, weight, active, created_at)
 VALUES
- ('ins_v2_grievance','insurance','grievance_filed','regulatory','SQL',NULL,'RAW.GRIEVANCE',0.35,TRUE,CURRENT_TIMESTAMP()),
- ('ins_v2_portability','insurance','portability_intent','competitive','SQL',NULL,'RAW.PORTABILITY_REQUEST',0.30,TRUE,CURRENT_TIMESTAMP()),
- ('ins_v2_service','insurance','service_failure','operational','SQL',NULL,'RAW.SUPPORT_TICKET',0.20,TRUE,CURRENT_TIMESTAMP()),
- ('ins_v2_reopen','insurance','ticket_reopen','operational','SQL',NULL,'RAW.SUPPORT_TICKET',0.15,TRUE,CURRENT_TIMESTAMP()),
- ('ins_v2_csat','insurance','csat_low','satisfaction','SQL',NULL,'RAW.SUPPORT_TICKET',0.15,TRUE,CURRENT_TIMESTAMP()),
- ('ins_v2_renewal','insurance','renewal_lateness','financial','SQL',NULL,'RAW.POLICY_VERSION',0.25,TRUE,CURRENT_TIMESTAMP()),
- ('ins_v2_downgrade','insurance','coverage_downgrade','product','SQL',NULL,'RAW.POLICY_VERSION',0.20,TRUE,CURRENT_TIMESTAMP()),
- ('ins_v2_claimfric','insurance','claim_friction','operational','SQL',NULL,'RAW.INSURANCE_CLAIMS',0.25,TRUE,CURRENT_TIMESTAMP()),
- ('ins_v2_group','insurance','group_exposure','relationship','SQL',NULL,'RAW.EMPLOYER',0.30,TRUE,CURRENT_TIMESTAMP()),
- ('ins_v2_emailtone','insurance','email_escalation','behavioural','INTENT',
+ ('ins_x_grievance','insurance','grievance_filed','regulatory','SQL',NULL,'RAW.GRIEVANCE',0.35,TRUE,CURRENT_TIMESTAMP()),
+ ('ins_x_portability','insurance','portability_intent','competitive','SQL',NULL,'RAW.PORTABILITY_REQUEST',0.30,TRUE,CURRENT_TIMESTAMP()),
+ ('ins_x_service','insurance','service_failure','operational','SQL',NULL,'RAW.SUPPORT_TICKET',0.20,TRUE,CURRENT_TIMESTAMP()),
+ ('ins_x_reopen','insurance','ticket_reopen','operational','SQL',NULL,'RAW.SUPPORT_TICKET',0.15,TRUE,CURRENT_TIMESTAMP()),
+ ('ins_x_csat','insurance','csat_low','satisfaction','SQL',NULL,'RAW.SUPPORT_TICKET',0.15,TRUE,CURRENT_TIMESTAMP()),
+ ('ins_x_renewal','insurance','renewal_lateness','financial','SQL',NULL,'RAW.POLICY_VERSION',0.25,TRUE,CURRENT_TIMESTAMP()),
+ ('ins_x_downgrade','insurance','coverage_downgrade','product','SQL',NULL,'RAW.POLICY_VERSION',0.20,TRUE,CURRENT_TIMESTAMP()),
+ ('ins_x_claimfric','insurance','claim_friction','operational','SQL',NULL,'RAW.INSURANCE_CLAIMS',0.25,TRUE,CURRENT_TIMESTAMP()),
+ ('ins_x_group','insurance','group_exposure','relationship','SQL',NULL,'RAW.EMPLOYER',0.30,TRUE,CURRENT_TIMESTAMP()),
+ ('ins_x_emailtone','insurance','email_escalation','behavioural','INTENT',
   'Read this email thread between a customer and their insurer. Judge how far the customer has escalated: NONE if routine, LOW if a simple request, MEDIUM if dissatisfied, HIGH if they threaten to leave, invoke a regulator, or demand written justification. Quote the sentence that most supports your answer.',
   'RAW.EMAIL_MESSAGE',0.25,TRUE,CURRENT_TIMESTAMP());
 

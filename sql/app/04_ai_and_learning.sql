@@ -1,8 +1,8 @@
 -- =============================================================================
--- APP_V2 — AI-assisted human execution, outcome recording and run reversal.
+-- APP — AI-assisted human execution, outcome recording and run reversal.
 -- =============================================================================
 USE DATABASE CUSTOMER_360_DB;
-USE SCHEMA APP_V2;
+USE SCHEMA APP;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- CALL_BRIEF — grounded prep for the person who actually makes the call.
@@ -26,10 +26,10 @@ BEGIN
                  FROM CUSTOMER_360_DB.CONFIG.ACTION_DEFINITION WHERE action_id=:P_ACTION_ID);
 
     v_signals := (SELECT LISTAGG(signal_name || '=' || signal_value, ', ')
-                  FROM CUSTOMER_360_DB.APP_V2.V_SIGNAL_RESOLVED WHERE customer_id=:P_CUSTOMER_ID);
+                  FROM CUSTOMER_360_DB.APP.V_SIGNAL_RESOLVED WHERE customer_id=:P_CUSTOMER_ID);
 
     v_quotes := (SELECT COALESCE(LISTAGG('"' || quote || '"', ' / '),'none captured')
-                 FROM CUSTOMER_360_DB.APP_V2.SIGNAL_EVIDENCE WHERE customer_id=:P_CUSTOMER_ID);
+                 FROM CUSTOMER_360_DB.APP.SIGNAL_EVIDENCE WHERE customer_id=:P_CUSTOMER_ID);
 
     IF (v_dom = 'insurance') THEN
         v_products := (SELECT COALESCE(LISTAGG(policy_id || ' ' || policy_type
@@ -95,7 +95,7 @@ BEGIN
                  WHERE customer_id=:P_CUSTOMER_ID AND is_current=TRUE LIMIT 1);
     v_action := (SELECT action_name FROM CUSTOMER_360_DB.CONFIG.ACTION_DEFINITION WHERE action_id=:P_ACTION_ID);
     v_quotes := (SELECT COALESCE(LISTAGG('"' || quote || '"', ' / '),'none')
-                 FROM CUSTOMER_360_DB.APP_V2.SIGNAL_EVIDENCE WHERE customer_id=:P_CUSTOMER_ID);
+                 FROM CUSTOMER_360_DB.APP.SIGNAL_EVIDENCE WHERE customer_id=:P_CUSTOMER_ID);
 
     v_json := (SELECT AI_COMPLETE(
         model => 'llama3.3-70b',
@@ -165,12 +165,12 @@ BEGIN
             'reason','No ACTION_EXECUTION row for this customer and action — execute it first.');
     END IF;
 
-    v_out_id := 'out-v2-' || :P_CUSTOMER_ID || '-' || :v_stamp;
+    v_out_id := 'out-x-' || :P_CUSTOMER_ID || '-' || :v_stamp;
     INSERT INTO CUSTOMER_360_DB.ENGINE.ACTION_OUTCOME (outcome_id, execution_id, customer_id,
         action_id, domain, outcome_type, state_before, state_after, success, notes, recorded_at)
     VALUES (:v_out_id, :v_exec, :P_CUSTOMER_ID, :P_ACTION_ID, :v_dom, :P_OUTCOME,
         :v_state, COALESCE(:P_STATE_AFTER, :v_state), :v_success,
-        'Recorded by APP_V2 run ' || COALESCE(:P_RUN_ID,'(none)'), CURRENT_TIMESTAMP());
+        'Recorded by APP run ' || COALESCE(:P_RUN_ID,'(none)'), CURRENT_TIMESTAMP());
 
     -- effectiveness before
     v_s0 := (SELECT success_count FROM CUSTOMER_360_DB.ENGINE.ACTION_EFFECTIVENESS
@@ -184,12 +184,12 @@ BEGIN
 
     IF (v_t0 IS NULL) THEN
         -- cold start: open a new effectiveness row rather than silently doing nothing
-        v_eff_id := 'eff-v2-' || :P_ACTION_ID || '-' || :v_state;
+        v_eff_id := 'eff-x-' || :P_ACTION_ID || '-' || :v_state;
         INSERT INTO CUSTOMER_360_DB.ENGINE.ACTION_EFFECTIVENESS (effectiveness_id, action_id, state_id,
             domain_id, success_count, total_count, success_rate, avg_uplift, confidence, last_updated)
         VALUES (:v_eff_id, :P_ACTION_ID, :v_state, :v_dom,
             IFF(:v_success,1,0), 1, IFF(:v_success,1.0,0.0), 0.05, 0.10, CURRENT_TIMESTAMP());
-        INSERT INTO CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT (run_id, object_type, object_id, detail)
+        INSERT INTO CUSTOMER_360_DB.APP.RUN_ARTIFACT (run_id, object_type, object_id, detail)
         VALUES (:P_RUN_ID,'EFFECTIVENESS_NEW', :v_eff_id, 'cold start row created');
         v_s0 := 0; v_t0 := 0; v_r0 := 0; v_c0 := 0;
     ELSE
@@ -211,9 +211,9 @@ BEGIN
     v_c1 := (SELECT confidence    FROM CUSTOMER_360_DB.ENGINE.ACTION_EFFECTIVENESS
              WHERE action_id=:P_ACTION_ID AND state_id=:v_state AND domain_id=:v_dom);
 
-    INSERT INTO CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT (run_id, object_type, object_id, detail)
+    INSERT INTO CUSTOMER_360_DB.APP.RUN_ARTIFACT (run_id, object_type, object_id, detail)
     VALUES (:P_RUN_ID,'OUTCOME', :v_out_id, :P_OUTCOME);
-    INSERT INTO CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT (run_id, object_type, object_id, detail)
+    INSERT INTO CUSTOMER_360_DB.APP.RUN_ARTIFACT (run_id, object_type, object_id, detail)
     SELECT :P_RUN_ID,'EFFECTIVENESS', :P_ACTION_ID || '|' || :v_state,
            'rate ' || TO_VARCHAR(:v_r0) || ' -> ' || TO_VARCHAR(:v_r1);
 
@@ -254,13 +254,13 @@ BEGIN
     END IF;
 
     v_sum := (SELECT SNOWFLAKE.CORTEX.SUMMARIZE(:v_corpus));
-    v_id  := 'sum-v2-' || :P_CUSTOMER_ID || '-' || TO_VARCHAR(CURRENT_TIMESTAMP(),'YYYYMMDDHH24MISSFF3');
+    v_id  := 'sum-x-' || :P_CUSTOMER_ID || '-' || TO_VARCHAR(CURRENT_TIMESTAMP(),'YYYYMMDDHH24MISSFF3');
 
     INSERT INTO CUSTOMER_360_DB.ENGINE.INTERACTION_SUMMARY
         (summary_id, customer_id, domain, summary_text, source_interactions, generated_at)
     SELECT :v_id, :P_CUSTOMER_ID, :v_dom, :v_sum, NULL, CURRENT_TIMESTAMP();
 
-    INSERT INTO CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT (run_id, object_type, object_id, detail)
+    INSERT INTO CUSTOMER_360_DB.APP.RUN_ARTIFACT (run_id, object_type, object_id, detail)
     VALUES (:P_RUN_ID,'SUMMARY', :v_id, NULL);
 
     RETURN v_sum;
@@ -278,23 +278,23 @@ $$
 DECLARE
     v_cust VARCHAR; v_n NUMBER;
 BEGIN
-    v_cust := (SELECT customer_id FROM CUSTOMER_360_DB.APP_V2.RUN_LOG WHERE run_id=:P_RUN_ID);
+    v_cust := (SELECT customer_id FROM CUSTOMER_360_DB.APP.RUN_LOG WHERE run_id=:P_RUN_ID);
 
     -- reverse effectiveness increments recorded by this run
     UPDATE CUSTOMER_360_DB.ENGINE.ACTION_EFFECTIVENESS ae
        SET success_count = GREATEST(0, ae.success_count
              - (SELECT COUNT(*) FROM CUSTOMER_360_DB.ENGINE.ACTION_OUTCOME o
-                JOIN CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT ra
+                JOIN CUSTOMER_360_DB.APP.RUN_ARTIFACT ra
                   ON ra.object_id = o.outcome_id AND ra.object_type='OUTCOME' AND ra.run_id=:P_RUN_ID
                 WHERE o.action_id = ae.action_id AND o.success = TRUE)),
            total_count = GREATEST(0, ae.total_count
              - (SELECT COUNT(*) FROM CUSTOMER_360_DB.ENGINE.ACTION_OUTCOME o
-                JOIN CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT ra
+                JOIN CUSTOMER_360_DB.APP.RUN_ARTIFACT ra
                   ON ra.object_id = o.outcome_id AND ra.object_type='OUTCOME' AND ra.run_id=:P_RUN_ID
                 WHERE o.action_id = ae.action_id)),
            last_updated = CURRENT_TIMESTAMP()
      WHERE ae.action_id IN (SELECT o.action_id FROM CUSTOMER_360_DB.ENGINE.ACTION_OUTCOME o
-            JOIN CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT ra
+            JOIN CUSTOMER_360_DB.APP.RUN_ARTIFACT ra
               ON ra.object_id=o.outcome_id AND ra.object_type='OUTCOME' AND ra.run_id=:P_RUN_ID);
 
     UPDATE CUSTOMER_360_DB.ENGINE.ACTION_EFFECTIVENESS
@@ -304,27 +304,27 @@ BEGIN
     -- restore claim statuses this run changed
     UPDATE CUSTOMER_360_DB.RAW.INSURANCE_CLAIMS
        SET claim_status='PENDING', updated_at=CURRENT_TIMESTAMP()
-     WHERE claim_id IN (SELECT object_id FROM CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT
+     WHERE claim_id IN (SELECT object_id FROM CUSTOMER_360_DB.APP.RUN_ARTIFACT
                         WHERE run_id=:P_RUN_ID AND object_type='CLAIM_STATUS');
 
     DELETE FROM CUSTOMER_360_DB.ENGINE.ACTION_OUTCOME WHERE outcome_id IN
-        (SELECT object_id FROM CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='OUTCOME');
+        (SELECT object_id FROM CUSTOMER_360_DB.APP.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='OUTCOME');
     DELETE FROM CUSTOMER_360_DB.ENGINE.ACTION_EXECUTION WHERE execution_id IN
-        (SELECT object_id FROM CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='EXECUTION');
+        (SELECT object_id FROM CUSTOMER_360_DB.APP.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='EXECUTION');
     DELETE FROM CUSTOMER_360_DB.ENGINE.ACTION_RECOMMENDATION WHERE recommendation_id IN
-        (SELECT object_id FROM CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='RECOMMENDATION');
+        (SELECT object_id FROM CUSTOMER_360_DB.APP.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='RECOMMENDATION');
     DELETE FROM CUSTOMER_360_DB.ENGINE.NOTIFICATION_LOG WHERE log_id IN
-        (SELECT object_id FROM CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='NOTIFICATION');
+        (SELECT object_id FROM CUSTOMER_360_DB.APP.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='NOTIFICATION');
     DELETE FROM CUSTOMER_360_DB.ENGINE.INTERACTION_SUMMARY WHERE summary_id IN
-        (SELECT object_id FROM CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='SUMMARY');
-    DELETE FROM CUSTOMER_360_DB.APP_V2.SIGNAL_EVIDENCE WHERE signal_instance_id IN
-        (SELECT object_id FROM CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='SIGNAL');
+        (SELECT object_id FROM CUSTOMER_360_DB.APP.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='SUMMARY');
+    DELETE FROM CUSTOMER_360_DB.APP.SIGNAL_EVIDENCE WHERE signal_instance_id IN
+        (SELECT object_id FROM CUSTOMER_360_DB.APP.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='SIGNAL');
     DELETE FROM CUSTOMER_360_DB.ENGINE.SIGNAL WHERE signal_instance_id IN
-        (SELECT object_id FROM CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='SIGNAL');
+        (SELECT object_id FROM CUSTOMER_360_DB.APP.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='SIGNAL');
 
     -- remove the state row this run opened and reinstate the one it closed
     DELETE FROM CUSTOMER_360_DB.ENGINE.CUSTOMER_STATE WHERE state_instance_id IN
-        (SELECT object_id FROM CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='STATE');
+        (SELECT object_id FROM CUSTOMER_360_DB.APP.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='STATE');
     UPDATE CUSTOMER_360_DB.ENGINE.CUSTOMER_STATE
        SET is_current=TRUE, effective_to='9999-12-31'::TIMESTAMP_NTZ
      WHERE customer_id=:v_cust
@@ -336,30 +336,30 @@ BEGIN
     -- queue + transitions created during this run's window
     DELETE FROM CUSTOMER_360_DB.ENGINE.DECISION_QUEUE
      WHERE customer_id=:v_cust AND created_at >=
-       (SELECT started_at FROM CUSTOMER_360_DB.APP_V2.RUN_LOG WHERE run_id=:P_RUN_ID);
+       (SELECT started_at FROM CUSTOMER_360_DB.APP.RUN_LOG WHERE run_id=:P_RUN_ID);
     DELETE FROM CUSTOMER_360_DB.ENGINE.STATE_TRANSITION
      WHERE customer_id=:v_cust AND transition_date >=
-       (SELECT started_at FROM CUSTOMER_360_DB.APP_V2.RUN_LOG WHERE run_id=:P_RUN_ID);
+       (SELECT started_at FROM CUSTOMER_360_DB.APP.RUN_LOG WHERE run_id=:P_RUN_ID);
 
     -- the injected event itself
     DELETE FROM CUSTOMER_360_DB.RAW.INSURANCE_CALL_TRANSCRIPTS WHERE transcript_id IN
-        (SELECT object_id FROM CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='TRANSCRIPT');
+        (SELECT object_id FROM CUSTOMER_360_DB.APP.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='TRANSCRIPT');
     DELETE FROM CUSTOMER_360_DB.RAW.LENDING_CALL_TRANSCRIPTS WHERE transcript_id IN
-        (SELECT object_id FROM CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='TRANSCRIPT');
+        (SELECT object_id FROM CUSTOMER_360_DB.APP.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='TRANSCRIPT');
     DELETE FROM CUSTOMER_360_DB.RAW.INSURANCE_INTERACTIONS WHERE interaction_id IN
-        (SELECT object_id FROM CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='INTERACTION');
+        (SELECT object_id FROM CUSTOMER_360_DB.APP.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='INTERACTION');
     DELETE FROM CUSTOMER_360_DB.RAW.LENDING_INTERACTIONS WHERE interaction_id IN
-        (SELECT object_id FROM CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='INTERACTION');
+        (SELECT object_id FROM CUSTOMER_360_DB.APP.RUN_ARTIFACT WHERE run_id=:P_RUN_ID AND object_type='INTERACTION');
 
     ALTER DYNAMIC TABLE CUSTOMER_360_DB.CANONICAL.INTERACTION REFRESH;
     ALTER DYNAMIC TABLE CUSTOMER_360_DB.CANONICAL.EVENT REFRESH;
 
-    v_n := (SELECT COUNT(*) FROM CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT WHERE run_id=:P_RUN_ID);
-    DELETE FROM CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT WHERE run_id=:P_RUN_ID;
-    UPDATE CUSTOMER_360_DB.APP_V2.RUN_LOG SET status='UNDONE' WHERE run_id=:P_RUN_ID;
+    v_n := (SELECT COUNT(*) FROM CUSTOMER_360_DB.APP.RUN_ARTIFACT WHERE run_id=:P_RUN_ID);
+    DELETE FROM CUSTOMER_360_DB.APP.RUN_ARTIFACT WHERE run_id=:P_RUN_ID;
+    UPDATE CUSTOMER_360_DB.APP.RUN_LOG SET status='UNDONE' WHERE run_id=:P_RUN_ID;
 
     RETURN 'Reversed run ' || :P_RUN_ID || ' — ' || TO_VARCHAR(:v_n) || ' artefacts removed.';
 END;
 $$;
 
-SELECT 'APP_V2 AI and learning procedures created' AS status;
+SELECT 'APP AI and learning procedures created' AS status;

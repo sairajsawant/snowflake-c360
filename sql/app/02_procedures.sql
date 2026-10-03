@@ -1,9 +1,9 @@
 -- =============================================================================
--- APP_V2 procedures — the real decisioning path used by the v2 Streamlit app.
--- Additive: nothing in APP / ENGINE / CONFIG is replaced.
+-- APP procedures — the real decisioning path used by the Streamlit app:
+-- generate a grounded transcript, inject it, extract signals, compute state.
 -- =============================================================================
 USE DATABASE CUSTOMER_360_DB;
-USE SCHEMA APP_V2;
+USE SCHEMA APP;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- START_RUN — open a run so every artefact can be undone later
@@ -16,7 +16,7 @@ DECLARE
     v_run VARCHAR;
 BEGIN
     v_run := 'run-' || :P_CUSTOMER_ID || '-' || TO_VARCHAR(CURRENT_TIMESTAMP(),'YYYYMMDDHH24MISSFF3');
-    INSERT INTO CUSTOMER_360_DB.APP_V2.RUN_LOG (run_id, customer_id, persona, scenario)
+    INSERT INTO CUSTOMER_360_DB.APP.RUN_LOG (run_id, customer_id, persona, scenario)
     VALUES (:v_run, :P_CUSTOMER_ID, :P_PERSONA, :P_SCENARIO);
     RETURN v_run;
 END;
@@ -96,36 +96,36 @@ DECLARE
 BEGIN
     SELECT domain INTO :v_dom FROM CUSTOMER_360_DB.CANONICAL.CUSTOMER WHERE customer_id = :P_CUSTOMER_ID LIMIT 1;
     v_stamp := TO_VARCHAR(CURRENT_TIMESTAMP(),'YYYYMMDDHH24MISSFF3');
-    v_tid := 'TRN-V2-' || :v_stamp;
-    v_iid := 'INT-V2-' || :v_stamp;
+    v_tid := 'TRN-X-' || :v_stamp;
+    v_iid := 'INT-X-' || :v_stamp;
 
     IF (v_dom = 'insurance') THEN
         INSERT INTO CUSTOMER_360_DB.RAW.INSURANCE_INTERACTIONS
             (interaction_id, customer_id, channel, interaction_type, subject,
              sentiment_score, duration_seconds, agent_id, interaction_date, notes)
-        VALUES (:v_iid, :P_CUSTOMER_ID, 'PHONE', 'COMPLAINT', 'Inbound call (v2 scenario)',
-             NULL, 420, 'agent_v2', CURRENT_TIMESTAMP(), 'Injected by APP_V2 scenario run');
+        VALUES (:v_iid, :P_CUSTOMER_ID, 'PHONE', 'COMPLAINT', 'Inbound call (app scenario)',
+             NULL, 420, 'agent_app', CURRENT_TIMESTAMP(), 'Injected by APP scenario run');
         INSERT INTO CUSTOMER_360_DB.RAW.INSURANCE_CALL_TRANSCRIPTS
             (transcript_id, interaction_id, customer_id, transcript_text, call_date, duration_seconds, agent_id)
-        VALUES (:v_tid, :v_iid, :P_CUSTOMER_ID, :P_TRANSCRIPT, CURRENT_TIMESTAMP(), 420, 'agent_v2');
+        VALUES (:v_tid, :v_iid, :P_CUSTOMER_ID, :P_TRANSCRIPT, CURRENT_TIMESTAMP(), 420, 'agent_app');
         ALTER DYNAMIC TABLE CUSTOMER_360_DB.CANONICAL.INTERACTION REFRESH;
         ALTER DYNAMIC TABLE CUSTOMER_360_DB.CANONICAL.EVENT REFRESH;
     ELSE
         INSERT INTO CUSTOMER_360_DB.RAW.LENDING_INTERACTIONS
             (interaction_id, customer_id, channel, interaction_type, subject,
              sentiment_score, duration_seconds, agent_id, interaction_date, notes)
-        VALUES (:v_iid, :P_CUSTOMER_ID, 'PHONE', 'HARDSHIP', 'Inbound call (v2 scenario)',
-             NULL, 420, 'agent_v2', CURRENT_TIMESTAMP(), 'Injected by APP_V2 scenario run');
+        VALUES (:v_iid, :P_CUSTOMER_ID, 'PHONE', 'HARDSHIP', 'Inbound call (app scenario)',
+             NULL, 420, 'agent_app', CURRENT_TIMESTAMP(), 'Injected by APP scenario run');
         INSERT INTO CUSTOMER_360_DB.RAW.LENDING_CALL_TRANSCRIPTS
             (transcript_id, interaction_id, customer_id, transcript_text, call_date, duration_seconds, agent_id)
-        VALUES (:v_tid, :v_iid, :P_CUSTOMER_ID, :P_TRANSCRIPT, CURRENT_TIMESTAMP(), 420, 'agent_v2');
+        VALUES (:v_tid, :v_iid, :P_CUSTOMER_ID, :P_TRANSCRIPT, CURRENT_TIMESTAMP(), 420, 'agent_app');
         ALTER DYNAMIC TABLE CUSTOMER_360_DB.CANONICAL.INTERACTION REFRESH;
         ALTER DYNAMIC TABLE CUSTOMER_360_DB.CANONICAL.EVENT REFRESH;
     END IF;
 
-    INSERT INTO CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT (run_id, object_type, object_id, detail)
+    INSERT INTO CUSTOMER_360_DB.APP.RUN_ARTIFACT (run_id, object_type, object_id, detail)
     SELECT :P_RUN_ID,'TRANSCRIPT', :v_tid, 'with interaction ' || :v_iid;
-    INSERT INTO CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT (run_id, object_type, object_id, detail)
+    INSERT INTO CUSTOMER_360_DB.APP.RUN_ARTIFACT (run_id, object_type, object_id, detail)
     VALUES (:P_RUN_ID,'INTERACTION', :v_iid, NULL);
 
     RETURN v_tid;
@@ -136,7 +136,7 @@ $$;
 -- EXTRACT_SIGNALS_FOR — real Cortex AI over the injected transcript.
 -- AI_SENTIMENT for the sentiment label, AI_COMPLETE with a JSON response_format
 -- for intent, which also returns the supporting quote and the model's own
--- confidence. The quote lands in CUSTOMER_360_DB.APP_V2.SIGNAL_EVIDENCE.
+-- confidence. The quote lands in CUSTOMER_360_DB.APP.SIGNAL_EVIDENCE.
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE PROCEDURE EXTRACT_SIGNALS_FOR(P_CUSTOMER_ID VARCHAR, P_TRANSCRIPT_ID VARCHAR, P_RUN_ID VARCHAR)
 RETURNS TABLE (SIGNAL_NAME VARCHAR, SIGNAL_VALUE VARCHAR, NUMERIC_VALUE FLOAT,
@@ -199,18 +199,18 @@ transcript that most supports your answer, verbatim. Give confidence between 0 a
     BEGIN TRANSACTION;
 
     -- intent signal
-    v_sid := 'sig-v2-' || :P_CUSTOMER_ID || '-intent-' || :v_stamp;
+    v_sid := 'sig-x-' || :P_CUSTOMER_ID || '-intent-' || :v_stamp;
     INSERT INTO CUSTOMER_360_DB.ENGINE.SIGNAL (signal_instance_id, customer_id, signal_id, signal_name,
         signal_value, numeric_value, confidence, evidence_ref, domain, extracted_at)
     SELECT :v_sid, :P_CUSTOMER_ID, :v_intent_sig, :v_intent_name,
         :v_val, :v_num, :v_conf, 'transcript:' || :P_TRANSCRIPT_ID, :v_dom, CURRENT_TIMESTAMP();
-    INSERT INTO CUSTOMER_360_DB.APP_V2.SIGNAL_EVIDENCE (signal_instance_id, customer_id, signal_name, quote, model, model_confidence)
+    INSERT INTO CUSTOMER_360_DB.APP.SIGNAL_EVIDENCE (signal_instance_id, customer_id, signal_name, quote, model, model_confidence)
     VALUES (:v_sid, :P_CUSTOMER_ID, :v_intent_name, :v_quote, 'llama3.3-70b', :v_conf);
-    INSERT INTO CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT (run_id, object_type, object_id, detail)
+    INSERT INTO CUSTOMER_360_DB.APP.RUN_ARTIFACT (run_id, object_type, object_id, detail)
     VALUES (:P_RUN_ID,'SIGNAL', :v_sid, :v_intent_name);
 
     -- sentiment signal
-    v_sid := 'sig-v2-' || :P_CUSTOMER_ID || '-sent-' || :v_stamp;
+    v_sid := 'sig-x-' || :P_CUSTOMER_ID || '-sent-' || :v_stamp;
     INSERT INTO CUSTOMER_360_DB.ENGINE.SIGNAL (signal_instance_id, customer_id, signal_id, signal_name,
         signal_value, numeric_value, confidence, evidence_ref, domain, extracted_at)
     SELECT :v_sid, :P_CUSTOMER_ID,
@@ -218,10 +218,10 @@ transcript that most supports your answer, verbatim. Give confidence between 0 a
         'negative_sentiment',
         CASE WHEN :v_sent_num >= 0.7 THEN 'HIGH' WHEN :v_sent_num >= 0.45 THEN 'MEDIUM' ELSE 'LOW' END,
         :v_sent_num, 0.9, 'transcript:' || :P_TRANSCRIPT_ID, :v_dom, CURRENT_TIMESTAMP();
-    INSERT INTO CUSTOMER_360_DB.APP_V2.SIGNAL_EVIDENCE (signal_instance_id, customer_id, signal_name, quote, model, model_confidence)
+    INSERT INTO CUSTOMER_360_DB.APP.SIGNAL_EVIDENCE (signal_instance_id, customer_id, signal_name, quote, model, model_confidence)
     VALUES (:v_sid, :P_CUSTOMER_ID, 'negative_sentiment',
         'AI_SENTIMENT overall = ' || :v_sent_label, 'AI_SENTIMENT', 0.9);
-    INSERT INTO CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT (run_id, object_type, object_id, detail)
+    INSERT INTO CUSTOMER_360_DB.APP.RUN_ARTIFACT (run_id, object_type, object_id, detail)
     VALUES (:P_RUN_ID,'SIGNAL', :v_sid, 'negative_sentiment');
 
     COMMIT;
@@ -230,7 +230,7 @@ transcript that most supports your answer, verbatim. Give confidence between 0 a
         SELECT s.signal_name, s.signal_value, s.numeric_value, s.confidence,
                e.quote, CASE WHEN e.model='AI_SENTIMENT' THEN 'AI_SENTIMENT' ELSE 'AI_COMPLETE' END
         FROM CUSTOMER_360_DB.ENGINE.SIGNAL s
-        JOIN CUSTOMER_360_DB.APP_V2.SIGNAL_EVIDENCE e ON e.signal_instance_id = s.signal_instance_id
+        JOIN CUSTOMER_360_DB.APP.SIGNAL_EVIDENCE e ON e.signal_instance_id = s.signal_instance_id
         WHERE s.customer_id = :P_CUSTOMER_ID AND s.evidence_ref = 'transcript:' || :P_TRANSCRIPT_ID
     );
     RETURN TABLE(res);
@@ -264,7 +264,7 @@ BEGIN
     -- Highest-priority matching rule wins. Rule set, priority and active flag all
     -- come from CUSTOMER_360_DB.CONFIG.STATE_RULE.
     SELECT r.target_state_id INTO :v_target
-    FROM CUSTOMER_360_DB.APP_V2.V_SIGNAL_WIDE w
+    FROM CUSTOMER_360_DB.APP.V_SIGNAL_WIDE w
     JOIN CUSTOMER_360_DB.CONFIG.STATE_RULE r ON r.domain_id = w.domain AND r.active = TRUE
     WHERE w.customer_id = :P_CUSTOMER_ID
       AND CASE
@@ -290,7 +290,7 @@ BEGIN
     FROM CUSTOMER_360_DB.CONFIG.STATE_DEFINITION WHERE state_id = :v_target;
 
     SELECT SUM(r.numeric_value * COALESCE(sd.weight,1.0)) INTO :v_score
-    FROM CUSTOMER_360_DB.APP_V2.V_SIGNAL_RESOLVED r
+    FROM CUSTOMER_360_DB.APP.V_SIGNAL_RESOLVED r
     LEFT JOIN CUSTOMER_360_DB.CONFIG.SIGNAL_DEFINITION sd ON sd.signal_id = r.signal_id
     WHERE r.customer_id = :P_CUSTOMER_ID;
 
@@ -299,13 +299,13 @@ BEGIN
         UPDATE CUSTOMER_360_DB.ENGINE.CUSTOMER_STATE SET is_current = FALSE, effective_to = CURRENT_TIMESTAMP()
         WHERE customer_id = :P_CUSTOMER_ID AND is_current = TRUE;
 
-        v_sid := 'state-v2-' || :P_CUSTOMER_ID || '-' || TO_VARCHAR(CURRENT_TIMESTAMP(),'YYYYMMDDHH24MISSFF3');
+        v_sid := 'state-x-' || :P_CUSTOMER_ID || '-' || TO_VARCHAR(CURRENT_TIMESTAMP(),'YYYYMMDDHH24MISSFF3');
         INSERT INTO CUSTOMER_360_DB.ENGINE.CUSTOMER_STATE (state_instance_id, customer_id, state_id, state_name,
             domain, severity, computed_score, effective_from, effective_to, is_current)
         VALUES (:v_sid, :P_CUSTOMER_ID, :v_target, :v_target_name, :v_dom, :v_sev,
             :v_score, CURRENT_TIMESTAMP(), '9999-12-31'::TIMESTAMP_NTZ, TRUE);
 
-        INSERT INTO CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT (run_id, object_type, object_id, detail)
+        INSERT INTO CUSTOMER_360_DB.APP.RUN_ARTIFACT (run_id, object_type, object_id, detail)
         SELECT :P_RUN_ID,'STATE', :v_sid, COALESCE(:v_prev,'none') || ' -> ' || :v_target_name;
 
         CALL CUSTOMER_360_DB.ENGINE.DETECT_TRANSITIONS();
@@ -316,4 +316,4 @@ BEGIN
 END;
 $$;
 
-SELECT 'APP_V2 pipeline procedures created' AS status;
+SELECT 'APP pipeline procedures created' AS status;

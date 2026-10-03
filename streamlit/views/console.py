@@ -350,7 +350,8 @@ def portfolio(persona):
         st.dataframe(act, hide_index=True, use_container_width=True)
     else:
         st.info("No actions have been carried out yet. Run a scenario in the Studio and "
-                "this fills up — those five ENGINE tables were empty until v2 wrote to them.")
+                "this fills up — ACTION_RECOMMENDATION, ACTION_EXECUTION, ACTION_OUTCOME, "
+                "NOTIFICATION_LOG and INTERACTION_SUMMARY all populate from a real run.")
 
 
 def ask(persona):
@@ -358,9 +359,6 @@ def ask(persona):
     st.caption("Cortex Search over the current interaction corpus — every transcript and "
                "logged contact for the 30 customers in the book, including anything a "
                "scenario run just injected.")
-    st.caption("⚠ The original SEARCH.CUSTOMER_INTERACTION_SEARCH still indexes the 60 "
-               "pre-migration documents, so it returns customers who no longer exist. v2 "
-               "searches APP_V2.INTERACTION_SEARCH_V2, built from CANONICAL.INTERACTION.")
     q = st.text_input("Question", value="customers threatening to port to a competitor")
     if st.button("Search", type="primary") or q:
         with st.spinner("Cortex Search…"):
@@ -389,9 +387,8 @@ def config(persona):
 
     st.markdown("##### Scoring weights")
     st.dataframe(sf.scoring_weights(), hide_index=True, use_container_width=True)
-    st.caption("These are read live by APP_V2.RECOMMEND_ACTION. Personas without a row fall "
-               "back to `default` — the original APP.RECOMMEND_ACTION returns zero rows "
-               "instead, which is why Team Lead and Analyst got no recommendations at all.")
+    st.caption("These are read live by APP.RECOMMEND_ACTION. Personas without a row fall "
+               "back to `default`, so every persona always gets a ranked recommendation.")
 
     st.markdown("##### Approval ceilings")
     p = sf.personas()
@@ -402,8 +399,9 @@ def config(persona):
                  hide_index=True, use_container_width=True)
     st.error("**CONFIG.USER_PERSONA still holds the unconverted values.** Policy gates are in "
              "rupees (₹4,15,000+) while the ceilings are 25,000 and 100,000, so no persona — "
-             "not even the VP — can approve anything. v2 reads a corrected override table. "
-             "The real fix is two UPDATE statements:")
+             "not even the VP — can approve anything. The app reads a corrected override "
+             "table (APP.PERSONA_LIMIT) so approvals work today; the real fix is still these "
+             "two UPDATE statements against CONFIG directly:")
     st.code("UPDATE CONFIG.USER_PERSONA SET max_approval_value = 2075000 "
             "WHERE persona_id='team_lead';\n"
             "UPDATE CONFIG.USER_PERSONA SET max_approval_value = 8300000 "

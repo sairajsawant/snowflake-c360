@@ -18,7 +18,7 @@ gets independent evidence rather than one fact restated five ways:
   POLICY_VERSION      product usage        renewal timeliness, upgrades, NCB
   EMPLOYER            group decision-maker HR owns the renewal, not the member
 
-Usage:  python3 scripts/generate_sources.py > sql/v2/09_new_sources_data.sql
+Usage:  python3 scripts/generate_sources.py > sql/app/09_new_sources_data.sql
 """
 import json
 import random

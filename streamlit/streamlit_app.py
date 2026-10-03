@@ -1,8 +1,8 @@
 """
-Customer 360 Decisioning — v2.
+Customer 360 Decisioning.
 
 Two modes. Scenario Studio walks the DETECT → UNDERSTAND → DECIDE → ACT → LEARN
-loop on any of the 30 real customers, driving the real APP_V2 procedures, real
+loop on any of the 30 real customers, driving the real APP procedures, real
 Cortex AI and the real ENGINE tables. Operations Console is the persona-scoped
 product those procedures sit behind.
 
@@ -14,7 +14,7 @@ import streamlit as st
 from utils import fmt, sf
 from views import console
 
-st.set_page_config(page_title="Customer 360 Decisioning v2",
+st.set_page_config(page_title="Customer 360 Decisioning",
                    page_icon="🛡️", layout="wide")
 
 SCENARIOS = {
@@ -77,7 +77,7 @@ def reset_run(keep_scenario=True):
 def sidebar():
     with st.sidebar:
         st.markdown("#### Customer 360 Decisioning")
-        st.caption("v2 · wired to live Snowflake")
+        st.caption("wired to live Snowflake")
 
         mode = st.radio("Mode", ["Scenario Studio", "Operations Console"],
                         index=0 if st.session_state["mode"] == "studio" else 1,
@@ -280,7 +280,7 @@ def step_stage():
                 label_visibility="collapsed")
 
     proves("Reads CANONICAL.CUSTOMER for the before-state. The Describe-it path calls "
-           "APP_V2.GENERATE_TRANSCRIPT, which puts this customer's real policy ids, premiums "
+           "APP.GENERATE_TRANSCRIPT, which puts this customer's real policy ids, premiums "
            "and claim amounts into the AI_COMPLETE prompt, so the generated call references "
            "POL-5015 and CLM-3009 rather than placeholders.")
     nav(can_advance=bool(st.session_state["draft"]))
@@ -360,8 +360,8 @@ def step_detect():
         p = defs[defs.EXTRACTION_METHOD == "INTENT"]
         st.code(p.iloc[0]["EXTRACTION_PROMPT"] if len(p) else "—", language=None)
 
-    proves("APP_V2.INJECT_EVENT writes to RAW.*_CALL_TRANSCRIPTS then issues ALTER DYNAMIC "
-           "TABLE … REFRESH. APP_V2.EXTRACT_SIGNALS_FOR calls AI_COMPLETE with a JSON "
+    proves("APP.INJECT_EVENT writes to RAW.*_CALL_TRANSCRIPTS then issues ALTER DYNAMIC "
+           "TABLE … REFRESH. APP.EXTRACT_SIGNALS_FOR calls AI_COMPLETE with a JSON "
            "response_format — which returns the value, the supporting quote and the model's "
            "own confidence — plus AI_SENTIMENT for the sentiment label. All six writes are "
            "in one transaction.")
@@ -484,7 +484,7 @@ def step_understand():
         st.caption("From what the customer said — AI_SUMMARIZE")
         st.markdown(st.session_state["summary_text"] or sf.summary(cid) or "_none yet_")
 
-    proves("APP_V2.COMPUTE_STATE_FOR resolves conflicting signals by severity rank with a "
+    proves("APP.COMPUTE_STATE_FOR resolves conflicting signals by severity rank with a "
            "recency tie-break, evaluates CONFIG.STATE_RULE in priority order, writes an SCD2 "
            "row only when the state actually changed, then calls the platform's own "
            "ENGINE.DETECT_TRANSITIONS to raise the transition and queue entry.")
@@ -619,9 +619,9 @@ def step_decide():
                    f"{fmt.pct(b['EFFECTIVENESS_RATE'])} (score {b['SCORE']:.4f}). Act now at "
                    "slightly lower odds, or wait for approval on the stronger play.")
 
-    proves("APP_V2.RECOMMEND_ACTION joins ACTION_STATE_MAPPING to ACTION_EFFECTIVENESS and "
+    proves("APP.RECOMMEND_ACTION joins ACTION_STATE_MAPPING to ACTION_EFFECTIVENESS and "
            "weights by SCORING_CONFIG for the calling persona, falling back to the domain "
-           "default. APP_V2.POLICY_EVAL evaluates every POLICY_RULE row with substituted "
+           "default. APP.POLICY_EVAL evaluates every POLICY_RULE row with substituted "
            "values, and AUTHORITY_CHECK compares the requirement against the persona ceiling.")
     nav()
 
@@ -647,7 +647,7 @@ def step_act():
             nav(can_advance=False)
             return
         label = "Approve and execute" if auth.get("requires_approval") else "Execute"
-        notes = st.text_input("Notes", value="Carried out from the v2 scenario studio")
+        notes = st.text_input("Notes", value="Carried out from the scenario studio")
         if st.button(label, type="primary"):
             with st.spinner("Writing the recommendation, the execution and the notification…"):
                 st.session_state["exec_result"] = sf.execute_action(
@@ -726,7 +726,7 @@ def step_act():
                        "call the system told us to have. That is the loop as a circle, "
                        "not a line.")
 
-    proves("APP_V2.EXECUTE_ACTION writes the recommendation, the execution and the "
+    proves("APP.EXECUTE_ACTION writes the recommendation, the execution and the "
            "notification, and performs a real UPDATE in RAW. CALL_BRIEF and SIMULATE_CALL are "
            "AI_COMPLETE grounded on this customer's signals and captured evidence quotes. The "
            "simulated call is injected back through INJECT_EVENT, so it is indistinguishable "
@@ -813,7 +813,7 @@ def step_learn():
     st.caption("Every row this run wrote, in order. `Undo all open runs` in the sidebar "
                "reverses exactly this list, which is what lets one judge follow another.")
 
-    proves("APP_V2.RECORD_OUTCOME writes ENGINE.ACTION_OUTCOME and recomputes "
+    proves("APP.RECORD_OUTCOME writes ENGINE.ACTION_OUTCOME and recomputes "
            "ENGINE.ACTION_EFFECTIVENESS — the same table RECOMMEND_ACTION reads. That shared "
            "table is the feedback loop; the re-ranking above is a second real call to the "
            "recommender, not a recalculation in the UI.")

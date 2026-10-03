@@ -1,19 +1,16 @@
 -- =============================================================================
--- APP_V2 — foundation for the v2 Streamlit app.
+-- APP — foundation for the Customer 360 decisioning platform.
 --
--- Additive only. Nothing in APP, ENGINE, CONFIG, CANONICAL or RAW is altered,
--- so the original app keeps working exactly as it does today.
---
--- Why this schema exists: APP.RECOMMEND_ACTION is broken in the live account
--- (it selects sc.effectiveness_weight / pr.approval_required, which do not
--- exist — SCORING_CONFIG is long-format and POLICY_RULE has no action_id).
--- That is why ENGINE.ACTION_RECOMMENDATION has never held a row. APP_V2
--- reimplements the decisioning path correctly against the real schema.
+-- Core decisioning objects: run-scoping for reversible scenario runs, the
+-- corrected approval-ceiling override (CONFIG.USER_PERSONA's values were
+-- never converted to rupees), the pivoted scoring-weight view, signal
+-- resolution, and the relationship-value and cost-ceiling views the
+-- recommender depends on.
 -- =============================================================================
 
 USE DATABASE CUSTOMER_360_DB;
-CREATE SCHEMA IF NOT EXISTS APP_V2;
-USE SCHEMA APP_V2;
+-- schema APP already exists (the original v1 schema, now cleaned)
+USE SCHEMA APP;
 
 -- ─── Run scoping ────────────────────────────────────────────────────────────
 -- Every scenario a judge runs gets a run_id. UNDO_RUN(run_id) reverses exactly
@@ -131,4 +128,4 @@ CREATE OR REPLACE VIEW V_COST_CEILING AS
 SELECT domain_id, MAX(default_cost) AS cost_ceiling
 FROM CUSTOMER_360_DB.CONFIG.ACTION_DEFINITION WHERE active = TRUE GROUP BY domain_id;
 
-SELECT 'APP_V2 foundation ready' AS status;
+SELECT 'APP foundation ready' AS status;

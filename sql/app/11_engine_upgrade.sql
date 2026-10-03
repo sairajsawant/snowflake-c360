@@ -10,17 +10,17 @@
 -- observable facts; nothing here samples a model.
 -- =============================================================================
 USE DATABASE CUSTOMER_360_DB;
-USE SCHEMA APP_V2;
+USE SCHEMA APP;
 
 -- Signals the engine reasons over = extracted signals + derived signals.
 CREATE OR REPLACE VIEW V_ALL_SIGNALS AS
 SELECT customer_id, domain, signal_name, signal_value, numeric_value,
        confidence, evidence_ref, 'EXTRACTED' AS origin
-FROM CUSTOMER_360_DB.APP_V2.V_SIGNAL_RESOLVED
+FROM CUSTOMER_360_DB.APP.V_SIGNAL_RESOLVED
 UNION ALL
 SELECT customer_id, domain, signal_name, signal_value, numeric_value,
        confidence, evidence_ref, 'DERIVED'
-FROM CUSTOMER_360_DB.APP_V2.V_DERIVED_SIGNALS;
+FROM CUSTOMER_360_DB.APP.V_DERIVED_SIGNALS;
 
 CREATE OR REPLACE VIEW V_SIGNAL_WIDE AS
 SELECT customer_id, domain,
@@ -42,7 +42,7 @@ SELECT customer_id, domain,
     MAX(CASE WHEN signal_name='claim_friction'     THEN signal_value  END) AS claim_friction,
     MAX(CASE WHEN signal_name='group_exposure'     THEN signal_value  END) AS group_exposure,
     MAX(CASE WHEN signal_name='email_escalation'   THEN signal_value  END) AS email_escalation
-FROM CUSTOMER_360_DB.APP_V2.V_ALL_SIGNALS
+FROM CUSTOMER_360_DB.APP.V_ALL_SIGNALS
 GROUP BY customer_id, domain;
 
 -- Rule text in CONFIG, so the UI shows what is actually being tested.
@@ -81,7 +81,7 @@ BEGIN
 
     v_target := (
         SELECT r.target_state_id
-        FROM CUSTOMER_360_DB.APP_V2.V_SIGNAL_WIDE w
+        FROM CUSTOMER_360_DB.APP.V_SIGNAL_WIDE w
         JOIN CUSTOMER_360_DB.CONFIG.STATE_RULE r
           ON r.domain_id = w.domain AND r.active = TRUE
         WHERE w.customer_id = :P_CUSTOMER_ID
@@ -122,7 +122,7 @@ BEGIN
     v_score := (SELECT ROUND(AVG(CASE signal_value
                     WHEN 'HIGH' THEN 1.0 WHEN 'MEDIUM' THEN 0.6
                     WHEN 'LOW' THEN 0.3 ELSE 0.0 END), 3)
-                FROM CUSTOMER_360_DB.APP_V2.V_ALL_SIGNALS
+                FROM CUSTOMER_360_DB.APP.V_ALL_SIGNALS
                 WHERE customer_id = :P_CUSTOMER_ID);
 
     IF (v_prev_id IS NULL OR v_prev_id <> v_target) THEN
@@ -131,7 +131,7 @@ BEGIN
            SET is_current = FALSE, effective_to = CURRENT_TIMESTAMP()
          WHERE customer_id = :P_CUSTOMER_ID AND is_current = TRUE;
 
-        v_sid := 'state-v2-' || :P_CUSTOMER_ID || '-' ||
+        v_sid := 'state-x-' || :P_CUSTOMER_ID || '-' ||
                  TO_VARCHAR(CURRENT_TIMESTAMP(),'YYYYMMDDHH24MISSFF3');
         INSERT INTO CUSTOMER_360_DB.ENGINE.CUSTOMER_STATE
             (state_instance_id, customer_id, state_id, state_name, domain, severity,
@@ -139,7 +139,7 @@ BEGIN
         VALUES (:v_sid, :P_CUSTOMER_ID, :v_target, :v_target_name, :v_dom, :v_sev,
                 :v_score, CURRENT_TIMESTAMP(), '9999-12-31'::TIMESTAMP_NTZ, TRUE);
 
-        INSERT INTO CUSTOMER_360_DB.APP_V2.RUN_ARTIFACT (run_id, object_type, object_id, detail)
+        INSERT INTO CUSTOMER_360_DB.APP.RUN_ARTIFACT (run_id, object_type, object_id, detail)
         SELECT :P_RUN_ID,'STATE', :v_sid, COALESCE(:v_prev,'none') || ' -> ' || :v_target_name;
 
         CALL CUSTOMER_360_DB.ENGINE.DETECT_TRANSITIONS();
@@ -168,15 +168,15 @@ SELECT s.signal_name, s.signal_value, s.origin, s.evidence_ref,
       WHEN s.signal_name = 'group_exposure' THEN 'Not a trigger — sizes the blast radius'
       ELSE 'Contributing evidence'
     END
-FROM CUSTOMER_360_DB.APP_V2.V_ALL_SIGNALS s
+FROM CUSTOMER_360_DB.APP.V_ALL_SIGNALS s
 WHERE s.customer_id = P_CUSTOMER_ID
 ORDER BY CASE s.signal_value WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END,
          s.signal_name
 $$;
 
-GRANT SELECT ON ALL VIEWS IN SCHEMA CUSTOMER_360_DB.APP_V2 TO ROLE C360_JUDGE;
-GRANT USAGE ON ALL FUNCTIONS IN SCHEMA CUSTOMER_360_DB.APP_V2 TO ROLE C360_JUDGE;
-GRANT USAGE ON ALL PROCEDURES IN SCHEMA CUSTOMER_360_DB.APP_V2 TO ROLE C360_JUDGE;
+GRANT SELECT ON ALL VIEWS IN SCHEMA CUSTOMER_360_DB.APP TO ROLE C360_JUDGE;
+GRANT USAGE ON ALL FUNCTIONS IN SCHEMA CUSTOMER_360_DB.APP TO ROLE C360_JUDGE;
+GRANT USAGE ON ALL PROCEDURES IN SCHEMA CUSTOMER_360_DB.APP TO ROLE C360_JUDGE;
 GRANT SELECT ON ALL TABLES IN SCHEMA CUSTOMER_360_DB.RAW TO ROLE C360_JUDGE;
 
 SELECT 'Engine upgraded to read the new sources' AS status;

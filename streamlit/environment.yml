@@ -1,7 +1,8 @@
+# Streamlit in Snowflake resolves an older default when the package is left
+# unpinned, which silently strips modern APIs (hide_index, column_config,
+# st.status, bordered containers). Pin it explicitly.
 name: sf_env
 channels:
   - snowflake
 dependencies:
   - streamlit=1.52.1
-  - altair
-  - snowflake-snowpark-python
