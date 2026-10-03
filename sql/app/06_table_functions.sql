@@ -88,7 +88,6 @@ SELECT action_id, action_name, action_type,
     CASE
         WHEN NOT requires_approval AND default_cost < 8300 THEN 'AUTONOMOUS'
         WHEN NOT requires_approval THEN 'AUTONOMOUS_REVIEW'
-        WHEN COALESCE(P_OFFER_AMOUNT,0) > 415000 THEN 'VP_APPROVAL'
         ELSE 'REQUIRES_APPROVAL'
     END,
     w_uplift, w_value, w_cost, w_conf,

@@ -73,12 +73,6 @@ def signal_definitions(domain):
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def live_signal_names():
-    """Which configured signals actually produce rows — several still do not."""
-    return set(_df(f"SELECT DISTINCT signal_name FROM {DB}.ENGINE.SIGNAL")["SIGNAL_NAME"])
-
-
-@st.cache_data(ttl=300, show_spinner=False)
 def state_rules(domain):
     return _df(f"""
         SELECT rule_id, target_state_id, priority, rule_expression, description
@@ -107,13 +101,9 @@ def scoring_weights():
 @st.cache_data(ttl=60, show_spinner=False)
 def effectiveness(domain=None):
     sql = f"""
-        SELECT ae.action_id, ad.action_name, ae.state_id, sd.state_name, ae.domain_id,
-               ae.success_count, ae.total_count, ae.success_rate, ae.avg_uplift, ae.confidence
-        FROM {DB}.ENGINE.ACTION_EFFECTIVENESS ae
-        JOIN {DB}.CONFIG.ACTION_DEFINITION ad ON ad.action_id = ae.action_id
-        JOIN {DB}.CONFIG.STATE_DEFINITION  sd ON sd.state_id  = ae.state_id
-        {"WHERE ae.domain_id = ?" if domain else ""}
-        ORDER BY ae.success_rate DESC
+        SELECT * FROM {DB}.APP.V_ACTION_EFFECTIVENESS
+        {"WHERE domain_id = ?" if domain else ""}
+        ORDER BY success_rate DESC
     """
     return _df(sql, [domain] if domain else None)
 
@@ -191,29 +181,22 @@ def summary(cid):
     """, [cid])
 
 
-def queue(persona_scope, assigned_user="agent_rm_1", team="team_alpha"):
-    where = "WHERE cs.is_current = TRUE AND cs.severity >= 2"
-    params = []
-    if persona_scope == "ASSIGNED":
-        where += " AND ca.assigned_user = ?"
-        params.append(assigned_user)
-    elif persona_scope == "TEAM":
-        where += " AND ca.assigned_team = ?"
-        params.append(team)
-    return _df(f"""
-        SELECT c.customer_id, c.full_name, c.domain, COALESCE(c.segment,'—') AS segment,
-               cs.state_name, cs.severity, rv.relationship_value,
-               ca.assigned_user, ca.assigned_team
-        FROM {DB}.CANONICAL.CUSTOMER c
-        JOIN {DB}.ENGINE.CUSTOMER_STATE cs
-             ON cs.customer_id = c.customer_id
-        LEFT JOIN {DB}.APP.V_RELATIONSHIP_VALUE rv
-             ON rv.customer_id = c.customer_id AND rv.domain = c.domain
-        LEFT JOIN {DB}.CONFIG.CUSTOMER_ASSIGNMENT ca
-             ON ca.customer_id = c.customer_id AND ca.domain = c.domain
-        {where}
-        ORDER BY cs.severity DESC, rv.relationship_value DESC NULLS LAST
-    """, params or None)
+def queue(persona_scope, assigned_user="rm1", team="team_alpha"):
+    """What needs attention — the rule (severity >= 2 + scope) lives in APP.DECISION_QUEUE."""
+    return _df(f"""SELECT * FROM TABLE({DB}.APP.DECISION_QUEUE(?, ?, ?))""",
+               [persona_scope, assigned_user or "", team or ""])
+
+
+def pending_approvals(persona_scope, persona, assigned_user="rm1", team="team_alpha"):
+    """Every customer in scope with a top candidate that needs sign-off — Snowpark proc."""
+    return _df(f"""CALL {DB}.APP.PENDING_APPROVALS(?, ?, ?, ?)""",
+               [persona_scope, assigned_user or "", team or "", persona])
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def trust_flags():
+    """Conflicting-evidence / thin-sample flags, computed for every customer."""
+    return _df(f"SELECT * FROM {DB}.APP.V_TRUST_FLAGS")
 
 
 @st.cache_data(ttl=120, show_spinner=False)
@@ -284,14 +267,16 @@ def compute_state(cid, run_id):
     Recompute state and report what moved. Read before and after around the
     procedure rather than trusting its return shape.
     """
-    before = _scalar(f"""SELECT state_name FROM {DB}.ENGINE.CUSTOMER_STATE
-                         WHERE customer_id = ? AND is_current = TRUE""", [cid])
+    before_df = _df(f"""SELECT state_name, severity FROM {DB}.ENGINE.CUSTOMER_STATE
+                        WHERE customer_id = ? AND is_current = TRUE""", [cid])
+    before = before_df.iloc[0]["STATE_NAME"] if len(before_df) else None
+    before_sev = int(before_df.iloc[0]["SEVERITY"]) if len(before_df) else 0
     session().sql(f"CALL {DB}.APP.COMPUTE_STATE_FOR(?, ?)",
                   params=[cid, run_id]).collect()
     row = _df(f"""SELECT state_name, severity, computed_score
                   FROM {DB}.ENGINE.CUSTOMER_STATE
                   WHERE customer_id = ? AND is_current = TRUE""", [cid]).iloc[0]
-    return {"previous": before, "new": row["STATE_NAME"],
+    return {"previous": before, "previous_severity": before_sev, "new": row["STATE_NAME"],
             "severity": int(row["SEVERITY"]), "score": float(row["COMPUTED_SCORE"]),
             "changed": before != row["STATE_NAME"]}
 
@@ -449,39 +434,6 @@ def portability(cid):
 def timeline(cid, limit=60):
     """Every dated record for this customer, one stream, newest first."""
     return _df(f"""
-        SELECT * FROM (
-            SELECT effective_from::TIMESTAMP_NTZ AS when_at, 'Policy' AS source,
-                   change_type AS what,
-                   policy_id || ' · cover ' || TO_VARCHAR(sum_insured)
-                     || ' · premium ' || TO_VARCHAR(premium)
-                     || CASE WHEN renewal_status='LATE'
-                             THEN ' · renewed ' || days_late::VARCHAR || ' days late' ELSE '' END AS detail
-            FROM {DB}.RAW.POLICY_VERSION WHERE customer_id = ?
-            UNION ALL
-            SELECT opened_at, 'Ticket', category,
-                   subject || CASE WHEN sla_breached THEN ' · SLA BREACHED' ELSE '' END
-                           || CASE WHEN reopen_count>0 THEN ' · reopened ' || reopen_count::VARCHAR ELSE '' END
-            FROM {DB}.RAW.SUPPORT_TICKET WHERE customer_id = ?
-            UNION ALL
-            SELECT sent_at, 'Email',
-                   CASE WHEN direction='INBOUND' THEN 'From customer' ELSE 'To customer' END,
-                   subject
-            FROM {DB}.RAW.EMAIL_MESSAGE WHERE customer_id = ?
-            UNION ALL
-            SELECT filed_date::TIMESTAMP_NTZ, 'Claim', claim_status,
-                   claim_id || ' · ' || claim_type || ' · ' || TO_VARCHAR(claim_amount)
-            FROM {DB}.RAW.INSURANCE_CLAIMS WHERE customer_id = ?
-            UNION ALL
-            SELECT filed_date::TIMESTAMP_NTZ, 'Grievance', status,
-                   'IRDAI ' || igms_token || ' · ' || category
-            FROM {DB}.RAW.GRIEVANCE WHERE customer_id = ?
-            UNION ALL
-            SELECT requested_date::TIMESTAMP_NTZ, 'Portability', stage,
-                   target_insurer || ' quoted ' || TO_VARCHAR(quoted_premium)
-                     || ' against ' || TO_VARCHAR(current_premium)
-            FROM {DB}.RAW.PORTABILITY_REQUEST WHERE customer_id = ?
-            UNION ALL
-            SELECT interaction_date, 'Interaction', UPPER(interaction_type), subject
-            FROM {DB}.CANONICAL.INTERACTION WHERE customer_id = ?
-        ) ORDER BY when_at DESC LIMIT {int(limit)}
-    """, [cid] * 7)
+        SELECT * FROM TABLE({DB}.APP.CUSTOMER_TIMELINE({_lit(cid)}))
+        ORDER BY when_at DESC LIMIT {int(limit)}
+    """)

@@ -45,23 +45,24 @@ CREATE TABLE IF NOT EXISTS SIGNAL_EVIDENCE (
 );
 
 -- ─── Corrected approval ceilings ────────────────────────────────────────────
--- CONFIG.USER_PERSONA.max_approval_value is still 25,000 / 100,000 while
--- POLICY_RULE and ACTION_DEFINITION are in rupees (₹4,15,000 / ₹20,75,000),
--- which makes every approval-gated action unapprovable by every persona.
--- This override applies the ×83 conversion without editing shared CONFIG.
+-- CONFIG.USER_PERSONA.max_approval_value is still 100,000 while POLICY_RULE
+-- and ACTION_DEFINITION are in rupees (₹4,15,000 / ₹20,75,000), which makes
+-- every approval-gated action unapprovable. This override applies the
+-- corrected rupee ceiling without editing shared CONFIG.
+-- No VP role: Team Lead is the top (and only) approver, holding what used to
+-- be the VP ceiling — one approval tier, not two.
 -- To fix it properly in CONFIG instead, run:
---   UPDATE CUSTOMER_360_DB.CONFIG.USER_PERSONA SET max_approval_value = 2075000 WHERE persona_id='team_lead';
---   UPDATE CUSTOMER_360_DB.CONFIG.USER_PERSONA SET max_approval_value = 8300000 WHERE persona_id='vp_executive';
+--   UPDATE CUSTOMER_360_DB.CONFIG.USER_PERSONA SET max_approval_value = 8300000 WHERE persona_id='team_lead';
 CREATE OR REPLACE TABLE PERSONA_LIMIT (
     persona_id        VARCHAR(50) PRIMARY KEY,
     max_approval_inr  FLOAT,
     note              VARCHAR(200)
 );
 INSERT INTO PERSONA_LIMIT VALUES
-    ('relationship_manager', 0,       'Cannot approve — unchanged'),
-    ('analyst',              0,       'Cannot approve — unchanged'),
-    ('team_lead',            2075000, 'CONFIG holds 25,000 — never INR-converted'),
-    ('vp_executive',         8300000, 'CONFIG holds 100,000 — never INR-converted');
+    ('rm1',      0,       'Cannot approve — unchanged'),
+    ('rm2',      0,       'Cannot approve — unchanged'),
+    ('analyst',  0,       'Cannot approve — unchanged'),
+    ('team_lead',8300000, 'CONFIG holds 100,000 — never INR-converted');
 
 -- ─── Scoring weights, pivoted ───────────────────────────────────────────────
 -- CONFIG.SCORING_CONFIG is long-format (factor_name, weight). Pivot it so the

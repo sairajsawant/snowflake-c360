@@ -96,7 +96,6 @@ BEGIN
             CASE
                 WHEN NOT requires_approval AND default_cost < 8300 THEN 'AUTONOMOUS'
                 WHEN NOT requires_approval THEN 'AUTONOMOUS_REVIEW'
-                WHEN COALESCE(:P_OFFER_AMOUNT,0) > 415000 THEN 'VP_APPROVAL'
                 ELSE 'REQUIRES_APPROVAL'
             END AS policy_status,
             w_uplift, w_value, w_cost, w_conf,
@@ -242,12 +241,12 @@ BEGIN
     v_exec := 'exec-x-' || :P_CUSTOMER_ID || '-' || :v_stamp;
     INSERT INTO CUSTOMER_360_DB.ENGINE.ACTION_EXECUTION (execution_id, recommendation_id, customer_id, action_id,
         action_name, domain, execution_type, executed_by, approved_by, execution_notes, status, executed_at)
-    VALUES (:v_exec, :v_rec, :P_CUSTOMER_ID, :P_ACTION_ID, :v_action_name, :v_dom,
+    SELECT :v_exec, :v_rec, :P_CUSTOMER_ID, :P_ACTION_ID, :v_action_name, :v_dom,
         CASE WHEN :v_needs THEN 'APPROVED' ELSE 'AUTONOMOUS' END,
         :P_PERSONA, CASE WHEN :v_needs THEN :P_PERSONA ELSE NULL END,
         COALESCE(:P_NOTES,'') || CASE WHEN COALESCE(:P_OFFER_AMOUNT,0) > 0
             THEN ' | offer INR ' || TO_VARCHAR(:P_OFFER_AMOUNT) ELSE '' END,
-        'COMPLETED', CURRENT_TIMESTAMP());
+        'COMPLETED', CURRENT_TIMESTAMP();
 
     -- real side effect in the system of record, which the pipeline can then see
     IF (P_ACTION_ID = 'ins_claim_escalation') THEN

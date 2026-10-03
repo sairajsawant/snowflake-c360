@@ -1,5 +1,5 @@
 """
-Customer 360 Decisioning.
+Customer 360 Decisioning Platform.
 
 Two modes. Scenario Studio walks the DETECT → UNDERSTAND → DECIDE → ACT → LEARN
 loop on any of the 30 real customers, driving the real APP procedures, real
@@ -14,7 +14,7 @@ import streamlit as st
 from utils import fmt, sf
 from views import console
 
-st.set_page_config(page_title="Customer 360 Decisioning",
+st.set_page_config(page_title="Customer 360 Decisioning Platform",
                    page_icon="🛡️", layout="wide")
 
 SCENARIOS = {
@@ -50,7 +50,7 @@ SCENARIOS = {
 
 STEPS = ["Stage event", "Detect", "Understand", "Decide", "Act", "Learn"]
 
-DEFAULTS = dict(mode="studio", persona="relationship_manager", page="queue",
+DEFAULTS = dict(mode="studio", persona="rm1", page="queue",
                 scenario="A", step=0, cid="INS-1011", offer=0, run_id=None,
                 compose="sample", situation="", draft="", transcript_id=None,
                 extracted=None, state_result=None, chosen=None, exec_result=None,
@@ -76,7 +76,7 @@ def reset_run(keep_scenario=True):
 # ─────────────────────────────────────────────────────────────── sidebar ──────
 def sidebar():
     with st.sidebar:
-        st.markdown("#### Customer 360 Decisioning")
+        st.markdown("#### Customer 360 Decisioning Platform")
         st.caption("wired to live Snowflake")
 
         mode = st.radio("Mode", ["Scenario Studio", "Operations Console"],
@@ -148,7 +148,7 @@ def scenario_picker():
                 reset_run()
                 st.rerun()
             if c is not None:
-                st.markdown(fmt.state_badge(c["STATE_NAME"]), unsafe_allow_html=True)
+                st.markdown(fmt.state_badge(c["STATE_NAME"], c["SEVERITY"]), unsafe_allow_html=True)
                 st.caption(f"{c['FULL_NAME']} · {fmt.lakh(c['RELATIONSHIP_VALUE'])}")
             st.caption(s["proves"])
 
@@ -213,7 +213,7 @@ def step_stage():
 
         c = sf.customer(cid)
         st.markdown(f"### {c['FULL_NAME']}")
-        st.markdown(fmt.state_badge(c["STATE_NAME"]), unsafe_allow_html=True)
+        st.markdown(fmt.state_badge(c["STATE_NAME"], c["SEVERITY"]), unsafe_allow_html=True)
         st.caption(f"{c['SEGMENT']} · {c['REGION']} · {c['DOMAIN']}"
                    + fmt.opt_int(c["CREDIT_SCORE"], prefix=" · credit "))
 
@@ -339,21 +339,11 @@ def step_detect():
 
     st.markdown("##### Every signal this domain is configured to look for")
     defs = sf.signal_definitions(c["DOMAIN"])
-    live = sf.live_signal_names()
-    rows = []
-    for _, d in defs.iterrows():
-        rows.append({
-            "signal": d["SIGNAL_NAME"], "method": d["EXTRACTION_METHOD"],
-            "weight": d["WEIGHT"], "source": d["SOURCE_TABLE"],
-            "producing rows?": "yes" if d["SIGNAL_NAME"] in live else "NO",
-        })
-    st.dataframe(rows, hide_index=True, use_container_width=True)
-    dead = [r["signal"] for r in rows if r["producing rows?"] == "NO"]
-    if dead:
-        st.warning(f"**{len(dead)} of {len(rows)} configured signals still produce nothing:** "
-                   + ", ".join(dead)
-                   + ". These are pure-SQL extractors that were never implemented, so every "
-                     "rule that depends on them can never fire.")
+    st.dataframe(
+        defs[["SIGNAL_NAME", "EXTRACTION_METHOD", "WEIGHT", "SOURCE_TABLE"]],
+        hide_index=True, use_container_width=True,
+        column_config={"SIGNAL_NAME": "Signal", "EXTRACTION_METHOD": "Method",
+                       "WEIGHT": "Weight", "SOURCE_TABLE": "Source"})
     st.caption("These signals exist because of rows in CONFIG.SIGNAL_DEFINITION — including "
                "the extraction prompt itself. Adding one is an INSERT, not a deploy.")
     with st.expander("The prompt that classified intent, read from config"):
@@ -385,10 +375,10 @@ def step_understand():
     a, b, cc = st.columns([2, 2, 3])
     with a:
         st.caption("Before")
-        st.markdown(fmt.state_badge(res["previous"]), unsafe_allow_html=True)
+        st.markdown(fmt.state_badge(res["previous"], res["previous_severity"]), unsafe_allow_html=True)
     with b:
         st.caption("After")
-        st.markdown(fmt.state_badge(res["new"]), unsafe_allow_html=True)
+        st.markdown(fmt.state_badge(res["new"], res["severity"]), unsafe_allow_html=True)
     with cc:
         st.caption("Changed?")
         st.markdown("**Yes — SCD2 row closed and reopened**" if res["changed"]
@@ -557,21 +547,22 @@ def step_decide():
 
     # persona comparison — the same facts, two mandates
     st.markdown("##### Who is asking changes the answer")
+    labels = dict(zip(sf.personas()["PERSONA_ID"], sf.personas()["PERSONA_NAME"]))
     pa, pb = st.columns(2)
-    for col, p in ((pa, "relationship_manager"), (pb, "vp_executive")):
+    for col, p in ((pa, "rm1"), (pb, "team_lead")):
         r = sf.recommend(cid, p, st.session_state["offer"])
         with col:
-            st.caption(f"**{p.replace('_', ' ').title()}** · weights "
+            st.caption(f"**{labels.get(p, p)}** · weights "
                        f"{r.iloc[0]['W_UPLIFT']}/{r.iloc[0]['W_VALUE']}/"
                        f"{r.iloc[0]['W_COST']}/{r.iloc[0]['W_CONF']}")
             for _, x in r.iterrows():
                 st.write(f"{int(x['RANKING'])}. {x['ACTION_NAME']} — `{x['SCORE']:.4f}`")
-    rm_top = sf.recommend(cid, "relationship_manager", st.session_state["offer"]).iloc[0]
-    vp_top = sf.recommend(cid, "vp_executive", st.session_state["offer"]).iloc[0]
-    if rm_top["ACTION_ID"] != vp_top["ACTION_ID"]:
-        st.info(f"**They disagree right now.** The relationship manager would "
-                f"{rm_top['ACTION_NAME'].lower()}; the VP, who is three times more "
-                f"cost-sensitive, would {vp_top['ACTION_NAME'].lower()} instead. Same "
+    rm_top = sf.recommend(cid, "rm1", st.session_state["offer"]).iloc[0]
+    tl_top = sf.recommend(cid, "team_lead", st.session_state["offer"]).iloc[0]
+    if rm_top["ACTION_ID"] != tl_top["ACTION_ID"]:
+        st.info(f"**They disagree right now.** Relationship Manager 1 would "
+                f"{rm_top['ACTION_NAME'].lower()}; the Team Lead, who is three times more "
+                f"cost-sensitive, would {tl_top['ACTION_NAME'].lower()} instead. Same "
                 "customer, same evidence, same instant — different mandate.")
     else:
         st.caption(f"Both roles currently agree on **{rm_top['ACTION_NAME']}**. "

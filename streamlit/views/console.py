@@ -10,19 +10,6 @@ import streamlit as st
 
 from utils import fmt, sf
 
-# Customers whose evidence is least trustworthy, surfaced rather than buried.
-# Each is a real, verifiable condition in the data, not a label.
-FLAGS = {
-    "INS-1011": ("CONFLICTING EVIDENCE",
-                 "churn_intent arrived both HIGH and LOW from two different calls"),
-    "INS-1003": ("CONFLICTING EVIDENCE",
-                 "churn_intent arrived both HIGH and LOW from two different calls"),
-    "LND-2010": ("THIN SAMPLE",
-                 "best lending action has n=38; the runner-up has n=45 at half the rate"),
-    "LND-2003": ("THIN SAMPLE",
-                 "hardship actions carry n=20 and n=14 — confidence 0.70 and 0.62"),
-}
-
 
 def _scope(persona):
     p = sf.personas()
@@ -40,13 +27,13 @@ def queue(persona):
     gap = sf.ownership_gap()
     unowned = int(gap["TOTAL"]) - int(gap["OWNED"])
 
-    q = sf.queue(row["DATA_SCOPE_TYPE"])
+    q = sf.queue(row["DATA_SCOPE_TYPE"], persona, "team_alpha")
     if not len(q):
         st.info("Nothing in scope needs attention.")
         if unowned and row["DATA_SCOPE_TYPE"] != "ALL":
             st.warning(f"**{unowned} of {int(gap['TOTAL'])} customers have no owner** in "
-                       "CONFIG.CUSTOMER_ASSIGNMENT, so they appear in no Relationship Manager "
-                       "or Team Lead queue at all. Switch to VP Executive for the whole book.")
+                       "CONFIG.CUSTOMER_ASSIGNMENT, so they appear in no RM or Team Lead "
+                       "queue at all. Switch to Team Lead for the whole book.")
         return
 
     k = st.columns(4)
@@ -55,8 +42,9 @@ def queue(persona):
     k[2].metric("Relationship at risk", fmt.lakh(q.RELATIONSHIP_VALUE.sum()))
     k[3].metric("Critical", int((q.SEVERITY >= 4).sum()))
 
+    tf = sf.trust_flags().set_index("CUSTOMER_ID")
     view = q.copy()
-    view["flag"] = [FLAGS.get(c, ("", ""))[0] for c in view.CUSTOMER_ID]
+    view["flag"] = [tf.loc[c, "FLAG"] if c in tf.index else "" for c in view.CUSTOMER_ID]
     view["value"] = view.RELATIONSHIP_VALUE.apply(fmt.lakh)
     st.dataframe(
         view[["CUSTOMER_ID", "FULL_NAME", "SEGMENT", "STATE_NAME", "value", "flag",
@@ -67,12 +55,13 @@ def queue(persona):
                        "value": "Relationship", "flag": "Trust flag",
                        "ASSIGNED_USER": "Owner"})
 
-    flagged = [c for c in view.CUSTOMER_ID if c in FLAGS]
+    flagged = [c for c in view.CUSTOMER_ID if c in tf.index]
     if flagged:
-        st.caption("**Trust flags are not decoration.** They mark where the engine's answer "
-                   "is least reliable:")
+        st.caption("**Trust flags are not decoration — computed from APP.V_TRUST_FLAGS for "
+                   "every customer, not a hand-picked few.** They mark where the engine's "
+                   "answer is least reliable:")
         for c in flagged:
-            st.caption(f"· `{c}` — {FLAGS[c][1]}")
+            st.caption(f"· `{c}` — {tf.loc[c, 'DETAIL']}")
 
     ins = q[q.DOMAIN == "insurance"]
     if len(ins) and ins.SEVERITY.max() >= 4:
@@ -107,36 +96,28 @@ def approvals(persona):
     lim = float(row["EFFECTIVE_LIMIT"])
     st.caption(f"Your ceiling is **{fmt.inr(lim)}**.")
 
-    q = sf.queue(row["DATA_SCOPE_TYPE"])
-    pending = []
-    for _, c in q.iterrows():
-        recs = sf.recommend(c.CUSTOMER_ID, persona, 0)
-        need = recs[recs.REQUIRES_APPROVAL]
-        if len(need):
-            a = need.iloc[0]
-            pending.append(dict(cid=c.CUSTOMER_ID, name=c.FULL_NAME,
-                                state=c.STATE_NAME, value=c.RELATIONSHIP_VALUE,
-                                action=a.ACTION_NAME, action_id=a.ACTION_ID,
-                                score=a.SCORE, eff=a.EFFECTIVENESS_RATE))
-    if not pending:
+    pending = sf.pending_approvals(row["DATA_SCOPE_TYPE"], persona, persona, "team_alpha")
+    if not len(pending):
         st.success("Nothing is waiting for approval in your scope.")
         return
+    st.caption("Computed server-side by APP.PENDING_APPROVALS — one Snowpark call scores "
+               "every customer in scope and keeps the top candidate that needs sign-off.")
 
-    for p in pending:
+    for _, p in pending.iterrows():
         with st.container(border=True):
-            auth = sf.authority(p["action_id"], persona, 0)
+            auth = sf.authority(p["ACTION_ID"], persona, 0)
             head, badge = st.columns([3, 1])
-            head.markdown(f"**{p['action']}** — {p['name']} (`{p['cid']}`)")
+            head.markdown(f"**{p['ACTION_NAME']}** — {p['FULL_NAME']} (`{p['CUSTOMER_ID']}`)")
             badge.markdown(fmt.policy_chip("PASS" if auth.get("authorised") else "BLOCK"),
                            unsafe_allow_html=True)
-            st.markdown(fmt.state_badge(p["state"]), unsafe_allow_html=True)
+            st.markdown(fmt.state_badge(p["STATE_NAME"], p["SEVERITY"]), unsafe_allow_html=True)
             m = st.columns(4)
-            m[0].metric("Relationship", fmt.lakh(p["value"]))
-            m[1].metric("Track record", fmt.pct(p["eff"]))
+            m[0].metric("Relationship", fmt.lakh(p["RELATIONSHIP_VALUE"]))
+            m[1].metric("Track record", fmt.pct(p["EFFECTIVENESS_RATE"]))
             m[2].metric("Needs authority", fmt.inr(auth.get("needed")))
             m[3].metric("Your ceiling", fmt.inr(auth.get("persona_limit")))
             if not auth.get("authorised"):
-                st.error("Above your authority — escalate to VP Executive.")
+                st.error("Above your authority — escalate to Team Lead.")
             if not auth.get("authorised_under_config"):
                 st.caption("⚠ Under the raw CONFIG ceiling this is unapprovable by every "
                            "persona including the VP. Using the corrected rupee limits.")
@@ -158,7 +139,7 @@ def customer_360(persona):
         return
 
     st.markdown(f"### {p['FULL_NAME']}")
-    st.markdown(fmt.state_badge(p["STATE_NAME"]), unsafe_allow_html=True)
+    st.markdown(fmt.state_badge(p["STATE_NAME"], p["SEVERITY"]), unsafe_allow_html=True)
     st.caption(f"{fmt.opt_str(p['SEGMENT'])} · {fmt.opt_str(p['REGION'])} · {p['DOMAIN']} · `{cid}` · "
                f"customer since {p['CUSTOMER_SINCE']} ({fmt.opt_int(p['TENURE_YEARS'])} years)")
 
@@ -324,13 +305,11 @@ def portfolio(persona):
                "carries the meaning on its own.")
 
     st.markdown("##### What actually works")
-    eff = sf.effectiveness()
-    ev = eff.copy()
-    ev["thin"] = ev.CONFIDENCE < 0.70
+    ev = sf.effectiveness().copy()
     ev["SUCCESS_RATE"] = ev["SUCCESS_RATE"] * 100
     st.dataframe(
         ev[["ACTION_NAME", "STATE_NAME", "SUCCESS_RATE", "SUCCESS_COUNT", "TOTAL_COUNT",
-            "AVG_UPLIFT", "CONFIDENCE", "thin"]],
+            "AVG_UPLIFT", "CONFIDENCE", "IS_THIN_SAMPLE"]],
         hide_index=True, use_container_width=True,
         column_config={
             "ACTION_NAME": "Action", "STATE_NAME": "At state",
@@ -340,9 +319,10 @@ def portfolio(persona):
             "TOTAL_COUNT": st.column_config.NumberColumn("n", width="small"),
             "AVG_UPLIFT": st.column_config.NumberColumn("Uplift", format="%.2f"),
             "CONFIDENCE": st.column_config.NumberColumn("Conf", format="%.2f"),
-            "thin": st.column_config.CheckboxColumn("thin sample?"),
+            "IS_THIN_SAMPLE": st.column_config.CheckboxColumn("thin sample?"),
         })
-    st.caption("Rows under 0.70 confidence are flagged. The recommender discounts them "
+    st.caption("Thin-sample is a real column on APP.V_ACTION_EFFECTIVENESS (confidence < "
+               "0.70), not a threshold re-typed in the UI. The recommender discounts these "
                "rather than treating 14 cases like 112.")
 
     if len(act):
@@ -397,15 +377,13 @@ def config(persona):
     st.dataframe(pv[["PERSONA_NAME", "DATA_SCOPE_TYPE", "CONFIG_LIMIT", "EFFECTIVE_LIMIT",
                      "needs fixing", "NOTE"]],
                  hide_index=True, use_container_width=True)
-    st.error("**CONFIG.USER_PERSONA still holds the unconverted values.** Policy gates are in "
-             "rupees (₹4,15,000+) while the ceilings are 25,000 and 100,000, so no persona — "
-             "not even the VP — can approve anything. The app reads a corrected override "
-             "table (APP.PERSONA_LIMIT) so approvals work today; the real fix is still these "
-             "two UPDATE statements against CONFIG directly:")
-    st.code("UPDATE CONFIG.USER_PERSONA SET max_approval_value = 2075000 "
-            "WHERE persona_id='team_lead';\n"
-            "UPDATE CONFIG.USER_PERSONA SET max_approval_value = 8300000 "
-            "WHERE persona_id='vp_executive';", language="sql")
+    st.error("**CONFIG.USER_PERSONA still holds the unconverted value.** Policy gates are in "
+             "rupees (₹4,15,000+) while Team Lead's ceiling is 100,000, so even the one "
+             "approval tier can't approve anything. The app reads a corrected override "
+             "table (APP.PERSONA_LIMIT) so approvals work today; the real fix is still this "
+             "UPDATE statement against CONFIG directly:")
+    st.code("UPDATE CONFIG.USER_PERSONA SET max_approval_value = 8300000 "
+            "WHERE persona_id='team_lead';", language="sql")
 
     st.markdown("##### State rules")
     dom = st.selectbox("Domain", ["insurance", "lending"])
@@ -418,11 +396,10 @@ def config(persona):
 
     st.markdown("##### Signals")
     defs = sf.signal_definitions(dom)
-    live = sf.live_signal_names()
-    dv = defs.copy()
-    dv["producing rows?"] = ["yes" if s in live else "NO" for s in dv.SIGNAL_NAME]
-    st.dataframe(dv[["SIGNAL_NAME", "EXTRACTION_METHOD", "WEIGHT", "SOURCE_TABLE",
-                     "producing rows?"]], hide_index=True, use_container_width=True)
+    st.dataframe(defs[["SIGNAL_NAME", "EXTRACTION_METHOD", "WEIGHT", "SOURCE_TABLE"]],
+                 hide_index=True, use_container_width=True)
+    st.caption("All configured signals for this domain produce rows — extracted via Cortex "
+               "or derived deterministically from source systems.")
 
 
 PAGES = {"queue": queue, "approvals": approvals, "c360": customer_360,

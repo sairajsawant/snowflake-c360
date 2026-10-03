@@ -64,28 +64,22 @@ def opt_str(v, default: str = "—") -> str:
     return default if missing(v) or v == "" else str(v)
 
 
-def severity_of(state_name) -> int:
-    if missing(state_name) or not state_name:
-        return 0
-    s = state_name.upper()
-    if "CRITICAL" in s or "HARDSHIP" in s:
-        return 4
-    if "HIGH" in s:
-        return 3
-    if "MEDIUM" in s:
-        return 2
-    return 1
+def state_badge(state_name, severity) -> str:
+    """
+    Coloured pill. Always carries the text label, so colour is never the only cue.
 
-
-def state_badge(state_name) -> str:
-    """Coloured pill. Always carries the text label, so colour is never the only cue."""
+    Severity must be passed in from the row that already has it (ENGINE.CUSTOMER_STATE
+    computes it authoritatively) rather than re-derived here by string-matching the
+    state name — a name that doesn't contain "HIGH"/"CRITICAL"/etc would have silently
+    fallen back to the wrong colour.
+    """
     if missing(state_name) or not state_name:
         return (
             "<span style='font:600 11px ui-monospace,monospace;padding:3px 8px;"
             "border-radius:4px;border:1px solid #888;color:#888'>NO STATE</span>"
         )
-    sev = severity_of(state_name)
-    c = SEV_COLOR[sev]
+    sev = int(severity) if not missing(severity) else 1
+    c = SEV_COLOR.get(sev, SEV_COLOR[1])
     return (
         f"<span style='font:600 11px ui-monospace,monospace;padding:3px 8px;"
         f"border-radius:4px;border:1px solid {c};color:{c};background:{c}14'>{state_name}</span>"
@@ -104,7 +98,6 @@ def policy_chip(status: str) -> str:
         "AUTONOMOUS": "#2E7D52",
         "AUTONOMOUS_REVIEW": "#C98A00",
         "REQUIRES_APPROVAL": "#C98A00",
-        "VP_APPROVAL": "#B3251E",
         "BLOCK": "#B3251E",
         "PASS": "#2E7D52",
         "ALLOW": "#2E7D52",
