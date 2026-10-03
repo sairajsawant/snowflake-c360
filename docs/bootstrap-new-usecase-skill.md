@@ -124,16 +124,44 @@ warranted one; most things don't).
   decline), confirm `acceptance_rate` moves and the new rate is visible in
   the scoring function's next call — not just written to the table.
 
-## What this doesn't solve yet
+## Update: the generic path now exists for SIGNAL_MATCHED use cases
 
-This checklist still means hand-writing a new scoring function and a new
-effectiveness table per use case — the *pattern* is reusable, the *code*
-isn't yet. The real fix is a `CONFIG.DECISION_DOMAIN` registry (domain_id,
-candidate_table, eligibility_rule_table, effectiveness_table) behind one
-generic `RECOMMEND_GENERIC(domain_id, customer_id)`, with eligibility rules
-evaluated by a constrained expression engine instead of hardcoded SQL — that
-also finally fixes `COMPUTE_STATE_FOR`'s hardcoded predicates. That's a
-separate, larger piece of work, not a step in this checklist — don't try to
-build it inline while bootstrapping use case #3; bootstrap #3 with this
-checklist, and only generalize once a third hand-written instance makes the
-duplication actually painful rather than theoretically so.
+`sql/app/19_decision_domain_registry.sql` built the registry this section
+used to call future work: `CONFIG.DECISION_DOMAIN`, `CONFIG.DECISION_CANDIDATE`,
+`CONFIG.DECISION_RULE`, `ENGINE.DECISION_EFFECTIVENESS`, and one function,
+`APP.RECOMMEND_GENERIC(decision_domain_id, customer_id)`. It's purely
+additive — churn and personalization still run on `RECOMMEND` and
+`RECOMMEND_PRODUCT` exactly as before; nothing existing was touched, so it
+can be deleted without affecting either live engine.
+
+**For a new SIGNAL_MATCHED use case (fit, not severity), steps 3, 4, 6, 7 of
+this checklist collapse into config inserts — skip writing a new scoring
+function or effectiveness table entirely:**
+1. `INSERT` one row into `CONFIG.DECISION_DOMAIN` (`eligibility_mode =
+   'SIGNAL_MATCHED'`, `implementation = 'GENERIC'`).
+2. `INSERT` candidates into `CONFIG.DECISION_CANDIDATE`.
+3. `INSERT` matching rows into `CONFIG.DECISION_RULE` (`match_type='SIGNAL'`,
+   `match_key` = signal_name, `match_value` = signal value, `weight`).
+4. Call `APP.RECOMMEND_GENERIC(your_domain_id, customer_id)` — ranked,
+   suppressed-against-churn-severity, effectiveness-aware, out of the box.
+   Record outcomes with the existing `APP.RECORD_DECISION_OUTCOME`.
+
+Verified by replaying personalization's own `PRODUCT_CATALOG`/`PRODUCT_RULE`
+data through `RECOMMEND_GENERIC` under a reference domain id
+(`personalization_generic_ref`) and diffing against `RECOMMEND_PRODUCT` for
+8 real customers — byte-identical candidate sets, rankings, scores, and
+suppression flags everywhere both returned rows.
+
+**STATE_GATED use cases are only partially covered**, and that limit is
+deliberate, not an oversight: `APP.RECOMMEND_GENERIC` supports gating
+candidates against the *existing, shared* `ENGINE.CUSTOMER_STATE` table
+(useful for a new domain that reacts to churn states churn already
+computes), but it does **not** reproduce `RECOMMEND`'s persona-weighted
+uplift/value/cost/confidence scoring or its approval-ceiling policy math —
+that's real, bespoke engineering, and forcing it into one generic formula
+would have been exactly the over-engineering this doc warns against. A
+third use case that needs its *own* independent state machine still needs
+`CUSTOMER_STATE` to gain a decision-domain partition key first (an additive
+`ALTER TABLE ... ADD COLUMN`, not a redesign) — that remains genuinely
+future work, not something to improvise mid-bootstrap. `COMPUTE_STATE_FOR`'s
+hardcoded predicates are likewise still untouched.
