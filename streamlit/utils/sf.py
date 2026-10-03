@@ -479,3 +479,200 @@ def signals_by_category(domain=None):
         ORDER BY category, domain_id, signal_name
     """
     return _df(sql, [domain] if domain else None)
+
+
+# ── personalization (product recommendation) ──────────────────────────────────
+def recommend_product(cid):
+    return _df(f"SELECT * FROM TABLE({DB}.APP.RECOMMEND_PRODUCT({_lit(cid)}))")
+
+
+def extract_product_interest(cid):
+    return _obj(f"CALL {DB}.APP.EXTRACT_PRODUCT_INTEREST(?)", [cid])
+
+
+def record_product_outcome(cid, product_id, accepted):
+    return _obj(f"CALL {DB}.APP.RECORD_PRODUCT_OUTCOME(?, ?, ?)", [cid, product_id, accepted])
+
+
+def search_products(query, limit=5):
+    payload = json.dumps({
+        "query": query,
+        "columns": ["PRODUCT_NAME", "PRODUCT_TYPE", "DOMAIN_ID", "CONTENT"],
+        "limit": int(limit),
+    })
+    sql = f"""
+        SELECT PARSE_JSON(SNOWFLAKE.CORTEX.SEARCH_PREVIEW(
+            '{DB}.APP.PRODUCT_SEARCH',
+            '{payload.replace("'", "''")}')) AS r
+    """
+    try:
+        raw = _scalar(sql)
+        parsed = json.loads(raw) if isinstance(raw, str) else raw
+        return parsed.get("results", [])
+    except Exception as exc:
+        return [{"error": str(exc)}]
+
+
+def product_catalog(domain=None):
+    sql = f"""
+        SELECT product_id, domain_id, product_name, product_type, min_age, max_age,
+               segment_fit, min_amount, max_amount, description
+        FROM {DB}.CONFIG.PRODUCT_CATALOG
+        WHERE active = TRUE {"AND domain_id = ?" if domain else ""}
+        ORDER BY domain_id, product_name
+    """
+    return _df(sql, [domain] if domain else None)
+
+
+# ── chat / agent-style orchestration ────────────────────────────────────────
+def chat_get_customer_360(cid):
+    return _df(f"SELECT * FROM TABLE({DB}.APP.GET_CUSTOMER_360({_lit(cid)}))")
+
+
+def chat_summarize_customer(cid):
+    return _scalar(f"CALL {DB}.APP.SUMMARIZE_CUSTOMER(?)", [cid])
+
+
+def resolve_customer(mention):
+    """Deterministic lookup — the model names who it thinks was meant; SQL decides who it actually is."""
+    if not mention:
+        return None
+    df = _df(f"""
+        SELECT customer_id, full_name FROM {DB}.CANONICAL.CUSTOMER
+        WHERE UPPER(customer_id) = UPPER(?) OR full_name ILIKE '%' || ? || '%'
+        ORDER BY IFF(UPPER(customer_id) = UPPER(?), 0, 1), full_name
+        LIMIT 1
+    """, [mention, mention, mention])
+    return None if df.empty else df.iloc[0]["CUSTOMER_ID"]
+
+
+def chat_classify(question):
+    """
+    Route a free-text question to the narrowest tool, mirroring the deployed
+    Agent's own orchestration instructions. The model only classifies and
+    extracts a raw name/ID mention — it never picks the final answer; a
+    deterministic tool call always does that.
+    """
+    prompt = (
+        "Classify this question from a relationship manager about a customer-360 "
+        "insurance/lending platform. Pick exactly one intent from this fixed list:\n"
+        "PROFILE - a plain request for a customer's profile/demographics/current state, nothing more\n"
+        "SUMMARY - asks to summarize a customer or catch up on their history\n"
+        "ACTION_RECOMMEND - asks what retention/servicing action to take for an at-risk customer\n"
+        "PRODUCT_RECOMMEND - asks what product/offer/upsell/renewal personalization fits a customer\n"
+        "PRODUCT_SEARCH - asks about a product's features, terms or price, not tied to one customer\n"
+        "INTERACTION_SEARCH - asks to find past calls, tickets or emails about a topic\n"
+        "DECISION_QUEUE - asks who needs attention across the portfolio, not one customer\n"
+        "UNKNOWN - none of the above fit\n\n"
+        "Also extract, verbatim, any customer name or ID mentioned (null if none), and a cleaned "
+        "search phrase if the intent is a search (null otherwise).\n\n"
+        f"QUESTION: {question}"
+    )
+    sql = f"""
+        SELECT AI_COMPLETE(
+            model => 'llama3.3-70b',
+            prompt => ?,
+            response_format => {{'type':'json','schema':{{'type':'object','properties':{{
+                'intent':{{'type':'string'}},'customer_mention':{{'type':'string'}},
+                'search_query':{{'type':'string'}}}},'required':['intent']}}}}
+        ) AS out
+    """
+    raw = _scalar(sql, [prompt])
+    parsed = json.loads(raw) if isinstance(raw, str) else raw
+
+    def _clean(v):
+        v = (v or '').strip()
+        return None if v == '' or v.lower() == 'null' else v
+
+    valid = {'PROFILE','SUMMARY','ACTION_RECOMMEND','PRODUCT_RECOMMEND','PRODUCT_SEARCH',
+             'INTERACTION_SEARCH','DECISION_QUEUE','UNKNOWN'}
+    intent = str(parsed.get('intent', 'UNKNOWN')).upper()
+    if intent not in valid:
+        intent = 'UNKNOWN'
+    return {
+        'intent': intent,
+        'customer_mention': _clean(parsed.get('customer_mention')),
+        'search_query': _clean(parsed.get('search_query')),
+    }
+
+
+def run_chat(question, persona):
+    """
+    The single entry point the chat UI calls. Classifies, resolves the
+    customer deterministically, dispatches to the one tool that intent
+    maps to, and composes a grounded answer. Returns everything the UI
+    needs to show both the narrative and the raw data it came from.
+    """
+    route = chat_classify(question)
+    intent = route['intent']
+    cid = resolve_customer(route['customer_mention'])
+    result = {'intent': intent, 'customer_id': cid, 'tool': None, 'data': None, 'answer': None}
+
+    if intent in ('PROFILE', 'SUMMARY', 'ACTION_RECOMMEND', 'PRODUCT_RECOMMEND') and not cid:
+        result['answer'] = (f"I couldn't match \"{route['customer_mention'] or 'a customer'}\" to "
+                             "anyone in the book — try the customer ID (e.g. INS-1011) or full name.")
+        return result
+
+    if intent == 'PROFILE':
+        result['tool'] = 'get_customer_360'
+        df = chat_get_customer_360(cid)
+        result['data'] = df.to_dict('records')
+        result['answer'] = chat_compose(question, intent, result['data'])
+
+    elif intent == 'SUMMARY':
+        result['tool'] = 'summarize_customer'
+        text = chat_summarize_customer(cid)
+        result['data'] = {'summary': text}
+        result['answer'] = text
+
+    elif intent == 'ACTION_RECOMMEND':
+        result['tool'] = 'recommend_action'
+        df = recommend(cid, persona, 0)
+        result['data'] = df.to_dict('records')
+        result['answer'] = chat_compose(question, intent, result['data'])
+
+    elif intent == 'PRODUCT_RECOMMEND':
+        result['tool'] = 'recommend_product'
+        df = recommend_product(cid)
+        result['data'] = df.to_dict('records')
+        result['answer'] = chat_compose(question, intent, result['data'])
+
+    elif intent == 'PRODUCT_SEARCH':
+        result['tool'] = 'search_products'
+        res = search_products(route['search_query'] or question, limit=5)
+        result['data'] = res
+        result['answer'] = chat_compose(question, intent, res)
+
+    elif intent == 'INTERACTION_SEARCH':
+        result['tool'] = 'interaction_search'
+        res = search_interactions(route['search_query'] or question, limit=5)
+        result['data'] = res
+        result['answer'] = chat_compose(question, intent, res)
+
+    elif intent == 'DECISION_QUEUE':
+        result['tool'] = 'get_decision_queue'
+        df = queue('ALL')
+        result['data'] = df.to_dict('records')
+        result['answer'] = chat_compose(question, intent, result['data'])
+
+    else:
+        result['answer'] = ("I'm not sure which of profile, summary, a retention action, a product "
+                             "recommendation, or a search this is — try being more specific, e.g. "
+                             "\"summarize INS-1011\" or \"what product fits LND-2010 at renewal\".")
+
+    return result
+
+
+def chat_compose(question, intent, facts):
+    """
+    Turn a tool's structured output into a short natural-language answer,
+    strictly grounded — the facts dict/list is the only source of truth
+    the model is given, so it cannot add a recommendation that isn't there.
+    """
+    prompt = (
+        "Answer this relationship-manager question in 2-4 sentences, using ONLY the facts given. "
+        "Never state a number, product, or action that is not present in the facts. If the facts "
+        "are empty, say plainly that nothing matched rather than guessing.\n\n"
+        f"QUESTION: {question}\n\nINTENT: {intent}\n\nFACTS (JSON):\n{json.dumps(facts, default=str)[:4000]}"
+    )
+    return _scalar("SELECT AI_COMPLETE('llama3.3-70b', ?)", [prompt])

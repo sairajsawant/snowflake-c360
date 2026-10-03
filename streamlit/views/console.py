@@ -334,28 +334,72 @@ def portfolio(persona):
                 "NOTIFICATION_LOG and INTERACTION_SUMMARY all populate from a real run.")
 
 
+TOOL_LABEL = {
+    'get_customer_360': 'get_customer_360 — profile lookup',
+    'summarize_customer': 'summarize_customer — AI_SUMMARIZE over conversation history',
+    'recommend_action': 'recommend_action — deterministic retention engine',
+    'recommend_product': 'recommend_product — deterministic personalization engine',
+    'search_products': 'search_products — Cortex Search over product literature',
+    'interaction_search': 'interaction_search — Cortex Search over calls/tickets/emails',
+    'get_decision_queue': 'get_decision_queue — portfolio queue',
+}
+
+CHAT_EXAMPLES = [
+    "Show me the customer 360 profile for INS-1011",
+    "Summarize customer INS-1005 for me",
+    "What's the recommended action for INS-1005?",
+    "What product should we offer Arun Mehta at renewal?",
+    "What does the Super Top-up Health Cover include?",
+    "Find calls about customers threatening to switch insurers",
+]
+
+
 def ask(persona):
     st.markdown("### Ask the data")
-    st.caption("Cortex Search over the current interaction corpus — every transcript and "
-               "logged contact for the 30 customers in the book, including anything a "
-               "scenario run just injected.")
-    q = st.text_input("Question", value="customers threatening to port to a competitor")
-    if st.button("Search", type="primary") or q:
-        with st.spinner("Cortex Search…"):
-            res = sf.search_interactions(q, limit=5)
-        if res and isinstance(res, list) and res[0].get("error"):
-            st.error(f"Search unavailable: {res[0]['error']}")
-            st.caption("The service exists and is ACTIVE; if this persists the warehouse may "
-                       "be resuming.")
-        else:
-            for r in res:
-                with st.container(border=True):
-                    st.markdown(f"**{r.get('CUSTOMER_NAME','—')}** · {r.get('SUBJECT','—')}")
-                    st.caption((r.get("CONTENT") or "")[:400])
-    st.divider()
-    st.caption("The Cortex Agent (`APP.CUSTOMER_360_AGENT`) is deployed and can orchestrate "
-               "Analyst plus Search plus these procedures. Wiring its streaming REST endpoint "
-               "into Streamlit is the one piece still outstanding.")
+    st.caption("Routes every question to the narrowest tool that answers it — a plain profile "
+               "lookup, a conversation summary, a retention action, or a product recommendation "
+               "are four different, independent tools, never blended into one. The same routing "
+               "logic is registered on `APP.CUSTOMER_360_AGENT` for use in Snowsight directly; "
+               "this page runs it natively since Streamlit-in-Snowflake can't reach the Agent's "
+               "REST endpoint without a separate external access integration.")
+
+    with st.expander("Try one of these"):
+        for ex in CHAT_EXAMPLES:
+            if st.button(ex, key=f"ex_{ex}", use_container_width=True):
+                st.session_state["chat_pending"] = ex
+                st.rerun()
+
+    st.session_state.setdefault("chat_history", [])
+
+    for turn in st.session_state["chat_history"]:
+        with st.chat_message(turn["role"]):
+            st.markdown(turn["content"])
+            if turn.get("tool"):
+                st.caption(f"🔧 {TOOL_LABEL.get(turn['tool'], turn['tool'])}"
+                           + (f" · customer `{turn['customer_id']}`" if turn.get("customer_id") else ""))
+            if turn.get("data") is not None:
+                with st.expander("See the underlying data"):
+                    if isinstance(turn["data"], list) and turn["data"]:
+                        st.dataframe(turn["data"], hide_index=True, use_container_width=True)
+                    else:
+                        st.json(turn["data"])
+
+    pending = st.session_state.pop("chat_pending", None)
+    typed = st.chat_input("Ask about a customer, a product, or who needs attention…")
+    q = pending or typed
+    if q:
+        st.session_state["chat_history"].append({"role": "user", "content": q})
+        with st.spinner("Routing…"):
+            result = sf.run_chat(q, persona)
+        st.session_state["chat_history"].append({
+            "role": "assistant", "content": result["answer"], "tool": result["tool"],
+            "customer_id": result["customer_id"], "data": result["data"],
+        })
+        st.rerun()
+
+    if st.session_state["chat_history"] and st.button("Clear conversation"):
+        st.session_state["chat_history"] = []
+        st.rerun()
 
 
 def config(persona):
