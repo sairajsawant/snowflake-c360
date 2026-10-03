@@ -105,7 +105,8 @@ def sidebar():
             st.divider()
             pages = {"queue": "Decision Queue", "approvals": "Approvals",
                      "c360": "Customer 360", "portfolio": "Portfolio & Learning",
-                     "agent": "Ask the data", "config": "Config Studio"}
+                     "agent": "Ask the data", "config": "Config Studio",
+                     "discovery": "Signal Discovery"}
             st.session_state["page"] = st.radio(
                 "View", list(pages), format_func=lambda k: pages[k],
                 index=list(pages).index(st.session_state["page"]),

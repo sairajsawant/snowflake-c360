@@ -402,8 +402,102 @@ def config(persona):
                "or derived deterministically from source systems.")
 
 
+CATEGORY_COLOR = {"RISK": "#B3251E", "SERVICE": "#C98A00", "OPPORTUNITY": "#2E7D52"}
+CATEGORY_BLURB = {
+    "RISK": "Predicts churn, default or attrition.",
+    "SERVICE": "Operational friction we caused.",
+    "OPPORTUNITY": "Relationship value or growth timing.",
+}
+PRIORITY_COLOR = {"HIGH": "#B3251E", "MEDIUM": "#C98A00", "LOW": "#5C6B70"}
+
+
+def signal_discovery(persona):
+    row = _scope(persona)
+    st.markdown("### Signal discovery")
+    st.caption("Runs once a day against RAW tables nothing has mined yet, and proposes "
+               "candidates — structured columns scored deterministically, free text via "
+               "Cortex. Nothing here activates on its own; every candidate waits for a human.")
+
+    last = sf.discovery_latest_run()
+    c1, c2 = st.columns([1, 3])
+    with c1:
+        if st.button("Run discovery now", use_container_width=True):
+            with st.spinner("Scanning tables nothing has mined yet…"):
+                sf.run_discovery()
+            sf.clear_caches()
+            st.rerun()
+    with c2:
+        if last is not None:
+            st.caption(f"Last run **{last['RUN_AT']}** · scanned {last['TABLES_SCANNED']} · "
+                       f"{int(last['CANDIDATES_FOUND'])} candidate(s) found")
+
+    if last is not None:
+        st.info(f"**What changed:** {last['AI_SUMMARY']}")
+
+    cand = sf.discovery_candidates("NEW")
+    if not len(cand):
+        st.success("No pending candidates — everything discovered so far has been reviewed.")
+    else:
+        hi = cand[cand.PRIORITY.isin(["HIGH", "MEDIUM"])]
+        lo = cand[cand.PRIORITY == "LOW"]
+
+        if not row["CAN_CONFIGURE"]:
+            st.caption(f"{row['PERSONA_NAME']} has read-only access here — switch to Analyst "
+                       "in the sidebar to promote or dismiss.")
+
+        if len(hi):
+            st.markdown("##### New candidates — worth a look")
+            for cat in ["RISK", "SERVICE", "OPPORTUNITY"]:
+                sub = hi[hi.CATEGORY == cat]
+                if not len(sub):
+                    continue
+                st.caption(f"**{cat}** · {CATEGORY_BLURB[cat]}")
+                for _, c in sub.iterrows():
+                    with st.container(border=True):
+                        head, badge = st.columns([4, 1])
+                        head.markdown(f"**{c['SIGNAL_NAME']}** — `{c['SOURCE_TABLE']}.{c['SOURCE_COLUMN']}`")
+                        badge.markdown(fmt.chip(c["PRIORITY"], PRIORITY_COLOR[c["PRIORITY"]]),
+                                       unsafe_allow_html=True)
+                        st.caption(c["RATIONALE"])
+                        if row["CAN_CONFIGURE"]:
+                            b1, b2, _ = st.columns([1, 1, 4])
+                            if b1.button("Promote", key=f"pr_{c['CANDIDATE_ID']}"):
+                                sf.promote_candidate(c["CANDIDATE_ID"])
+                                sf.clear_caches()
+                                st.rerun()
+                            if b2.button("Dismiss", key=f"di_{c['CANDIDATE_ID']}"):
+                                sf.dismiss_candidate(c["CANDIDATE_ID"])
+                                sf.clear_caches()
+                                st.rerun()
+
+        if len(lo):
+            with st.expander(f"{len(lo)} low-priority candidate(s) — mostly static or "
+                              "rarely-informative columns, collapsed so the real work stays visible"):
+                st.dataframe(lo[["SIGNAL_NAME", "CATEGORY", "SOURCE_TABLE", "SOURCE_COLUMN", "RATIONALE"]],
+                             hide_index=True, use_container_width=True,
+                             column_config={"SIGNAL_NAME": "Signal", "CATEGORY": "Type",
+                                            "SOURCE_TABLE": "Table", "SOURCE_COLUMN": "Column",
+                                            "RATIONALE": "Why"})
+
+    st.divider()
+    st.markdown("##### Signals already live, same three types")
+    live = sf.signals_by_category()
+    for cat in ["RISK", "SERVICE", "OPPORTUNITY"]:
+        sub = live[live.CATEGORY == cat]
+        if not len(sub):
+            continue
+        st.caption(f"**{cat}** ({len(sub)}) · {CATEGORY_BLURB[cat]}")
+        st.dataframe(
+            sub[["SIGNAL_NAME", "DOMAIN_ID", "EXTRACTION_METHOD", "SOURCE_TABLE", "WEIGHT"]],
+            hide_index=True, use_container_width=True,
+            column_config={"SIGNAL_NAME": "Signal", "DOMAIN_ID": "Domain",
+                           "EXTRACTION_METHOD": "Method", "SOURCE_TABLE": "Source",
+                           "WEIGHT": "Weight"})
+
+
 PAGES = {"queue": queue, "approvals": approvals, "c360": customer_360,
-         "portfolio": portfolio, "agent": ask, "config": config}
+         "portfolio": portfolio, "agent": ask, "config": config,
+         "discovery": signal_discovery}
 
 
 def render(page, persona):

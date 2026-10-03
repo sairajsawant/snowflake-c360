@@ -437,3 +437,45 @@ def timeline(cid, limit=60):
         SELECT * FROM TABLE({DB}.APP.CUSTOMER_TIMELINE({_lit(cid)}))
         ORDER BY when_at DESC LIMIT {int(limit)}
     """)
+
+
+# ── signal discovery ──────────────────────────────────────────────────────────
+def discovery_candidates(status="NEW"):
+    return _df(f"""
+        SELECT candidate_id, domain_id, signal_name, category, extraction_method,
+               extraction_prompt, source_table, source_column, rationale, priority,
+               trigger_rate, discovered_at
+        FROM {DB}.APP.SIGNAL_CANDIDATE WHERE status = ?
+        ORDER BY CASE priority WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 ELSE 3 END, signal_name
+    """, [status])
+
+
+def discovery_latest_run():
+    df = _df(f"""
+        SELECT run_id, run_at, tables_scanned, candidates_found, ai_summary
+        FROM {DB}.APP.DISCOVERY_RUN ORDER BY run_at DESC LIMIT 1
+    """)
+    return None if df.empty else df.iloc[0]
+
+
+def run_discovery():
+    return _scalar(f"CALL {DB}.APP.DISCOVER_SIGNALS()")
+
+
+def promote_candidate(candidate_id):
+    return _scalar(f"CALL {DB}.APP.PROMOTE_SIGNAL_CANDIDATE(?)", [candidate_id])
+
+
+def dismiss_candidate(candidate_id):
+    return _scalar(f"CALL {DB}.APP.DISMISS_SIGNAL_CANDIDATE(?)", [candidate_id])
+
+
+def signals_by_category(domain=None):
+    sql = f"""
+        SELECT signal_id, domain_id, signal_name, category, extraction_method,
+               source_table, weight
+        FROM {DB}.CONFIG.SIGNAL_DEFINITION
+        WHERE active = TRUE {"AND domain_id = ?" if domain else ""}
+        ORDER BY category, domain_id, signal_name
+    """
+    return _df(sql, [domain] if domain else None)
