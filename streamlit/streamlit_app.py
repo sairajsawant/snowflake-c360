@@ -50,7 +50,7 @@ SCENARIOS = {
 
 STEPS = ["Stage event", "Detect", "Understand", "Decide", "Act", "Learn"]
 
-DEFAULTS = dict(mode="studio", persona="rm1", page="queue",
+DEFAULTS = dict(mode="studio", persona="rm1", page="feed",
                 scenario="A", step=0, cid="INS-1011", offer=0, run_id=None,
                 compose="sample", situation="", draft="", transcript_id=None,
                 extracted=None, state_result=None, chosen=None, exec_result=None,
@@ -103,7 +103,7 @@ def sidebar():
 
         if st.session_state["mode"] == "console":
             st.divider()
-            pages = {"queue": "Decision Queue", "approvals": "Approvals",
+            pages = {"feed": "My Feed", "queue": "Decision Queue", "approvals": "Approvals",
                      "c360": "Customer 360", "portfolio": "Portfolio & Learning",
                      "agent": "Ask the data", "config": "Config Studio",
                      "discovery": "Signal Discovery"}

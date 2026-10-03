@@ -564,25 +564,81 @@ def chat_classify(question):
         "INTERACTION_SEARCH - asks to find past calls, tickets or emails about a topic\n"
         "DECISION_QUEUE - asks who needs attention across the portfolio, not one customer\n"
         "UNKNOWN - none of the above fit\n\n"
-        "Also extract, verbatim, any customer name or ID mentioned (null if none), and a cleaned "
-        "search phrase if the intent is a search (null otherwise).\n\n"
+        "Also extract any specific customer name or ID mentioned, verbatim. If the question only "
+        "refers to a customer generically with no specific name or ID, return JSON null (not the "
+        "string \"null\") for customer_mention. Also extract a cleaned search phrase if the intent "
+        "is a search, else JSON null for search_query. ALWAYS include all three keys — intent, "
+        "customer_mention, search_query — in the output, even when a value is null.\n\n"
         f"QUESTION: {question}"
     )
+    # customer_mention/search_query must be in `required` — otherwise the model
+    # is free to omit them from the JSON entirely (confirmed: it reliably drops
+    # customer_mention even when a customer ID is explicitly in the question).
+    # `type: [string, null]` is needed since they're genuinely nullable fields.
     sql = f"""
         SELECT AI_COMPLETE(
             model => 'llama3.3-70b',
             prompt => ?,
             response_format => {{'type':'json','schema':{{'type':'object','properties':{{
-                'intent':{{'type':'string'}},'customer_mention':{{'type':'string'}},
-                'search_query':{{'type':'string'}}}},'required':['intent']}}}}
+                'intent':{{'type':'string'}},'customer_mention':{{'type':['string','null']}},
+                'search_query':{{'type':['string','null']}}}},
+                'required':['intent','customer_mention','search_query']}}}}
         ) AS out
     """
-    raw = _scalar(sql, [prompt])
-    parsed = json.loads(raw) if isinstance(raw, str) else raw
+    # Structured-output generation (response_format) has a real, sometimes
+    # input-specific failure rate — some questions reliably return NULL no
+    # matter how clean the prompt is, confirmed by testing the same question
+    # 3 times in a row. Retrying the SAME approach doesn't fix that, so after
+    # retries, fall through to a plain-text completion with no schema
+    # constraint — a different generation path, proven more robust — before
+    # ever giving up to UNKNOWN.
+    parsed = None
+    for _attempt in range(2):
+        raw = _scalar(sql, [prompt])
+        if raw is None:
+            continue
+        try:
+            parsed = json.loads(raw) if isinstance(raw, str) else raw
+        except (json.JSONDecodeError, TypeError):
+            parsed = None
+        if isinstance(parsed, dict):
+            break
+
+    if not isinstance(parsed, dict):
+        plain_prompt = prompt + (
+            "\n\nRespond with EXACTLY three lines, nothing else:\n"
+            "Line 1: the intent word from the list above\n"
+            "Line 2: any specific customer name or ID mentioned, or the word NONE\n"
+            "Line 3: a cleaned search phrase if the intent is a search, or the word NONE"
+        )
+        plain = _scalar("SELECT AI_COMPLETE('llama3.3-70b', ?)", [plain_prompt])
+        # The model sometimes emits the answer as a quoted string with literal
+        # backslash-n escapes instead of real newlines (e.g. '"ACTION_RECOMMEND\nX\nY"')
+        # rather than actual line breaks — normalize both before splitting.
+        plain_clean = (plain or '').strip()
+        if len(plain_clean) > 1 and plain_clean[0] == '"' and plain_clean[-1] == '"':
+            plain_clean = plain_clean[1:-1]
+        plain_clean = plain_clean.replace('\\n', '\n')
+        lines = [ln.strip() for ln in plain_clean.split('\n') if ln.strip()]
+        parsed = {
+            'intent': lines[0] if len(lines) > 0 else 'UNKNOWN',
+            'customer_mention': lines[1] if len(lines) > 1 else None,
+            'search_query': lines[2] if len(lines) > 2 else None,
+        }
+
+    # Generic placeholder phrases the model sometimes extracts as if they were
+    # a name — rejected independently of the prompt, same "guard in two
+    # places" principle used for the product-interest vocabulary.
+    GENERIC_MENTIONS = {
+        'a customer', 'the customer', 'this customer', 'that customer',
+        'customers', 'someone', 'a client', 'the client', 'any customer',
+    }
 
     def _clean(v):
         v = (v or '').strip()
-        return None if v == '' or v.lower() == 'null' else v
+        if v == '' or v.lower() in ('null', 'none') or v.lower() in GENERIC_MENTIONS:
+            return None
+        return v
 
     valid = {'PROFILE','SUMMARY','ACTION_RECOMMEND','PRODUCT_RECOMMEND','PRODUCT_SEARCH',
              'INTERACTION_SEARCH','DECISION_QUEUE','UNKNOWN'}
@@ -609,8 +665,12 @@ def run_chat(question, persona):
     result = {'intent': intent, 'customer_id': cid, 'tool': None, 'data': None, 'answer': None}
 
     if intent in ('PROFILE', 'SUMMARY', 'ACTION_RECOMMEND', 'PRODUCT_RECOMMEND') and not cid:
-        result['answer'] = (f"I couldn't match \"{route['customer_mention'] or 'a customer'}\" to "
-                             "anyone in the book — try the customer ID (e.g. INS-1011) or full name.")
+        if route['customer_mention']:
+            result['answer'] = (f"I couldn't match \"{route['customer_mention']}\" to anyone in "
+                                 "the book — try the customer ID (e.g. INS-1011) or full name.")
+        else:
+            result['answer'] = ("Which customer did you mean? Give me an ID (e.g. INS-1011) or "
+                                 "a full name.")
         return result
 
     if intent == 'PROFILE':
@@ -675,4 +735,22 @@ def chat_compose(question, intent, facts):
         "are empty, say plainly that nothing matched rather than guessing.\n\n"
         f"QUESTION: {question}\n\nINTENT: {intent}\n\nFACTS (JSON):\n{json.dumps(facts, default=str)[:4000]}"
     )
-    return _scalar("SELECT AI_COMPLETE('llama3.3-70b', ?)", [prompt])
+    for _attempt in range(2):
+        answer = _scalar("SELECT AI_COMPLETE('llama3.3-70b', ?)", [prompt])
+        if answer:
+            return answer
+    return "Here's what matched, shown below — the summary didn't generate this time."
+
+
+# ── unified persona feed ─────────────────────────────────────────────────────
+@st.cache_data(ttl=300, show_spinner=False)
+def unified_feed(persona_scope, persona, assigned_user="rm1", team="team_alpha"):
+    """
+    One ranked list per persona: retention actions for HIGH/CRITICAL customers,
+    product opportunities for everyone else — never both for the same customer.
+    Loops every customer in scope through two scoring calls each, so this is
+    slow at full-book scope (a few minutes for all 30) — cached for 5 minutes
+    rather than re-run on every page visit.
+    """
+    return _df(f"""CALL {DB}.APP.UNIFIED_FEED(?, ?, ?, ?)""",
+               [persona_scope, assigned_user or "", team or "", persona])

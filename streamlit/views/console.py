@@ -17,6 +17,49 @@ def _scope(persona):
     return row
 
 
+def feed(persona):
+    row = _scope(persona)
+    st.markdown("### My Feed")
+    st.caption("One ranked list, not two pages to check — retention actions for customers "
+               "in HIGH or CRITICAL risk, product opportunities for everyone else, never "
+               "both for the same customer. A customer about to leave never shows up with "
+               "an upsell: `APP.RECOMMEND_PRODUCT` checks churn state before suggesting one.")
+
+    if st.button("Refresh feed"):
+        sf.unified_feed.clear()
+
+    with st.spinner("Scoring every customer in scope — retention and product engines both "
+                     "run per customer, this can take a few minutes at full-book scope…"):
+        f = sf.unified_feed(row["DATA_SCOPE_TYPE"], persona, persona, "team_alpha")
+
+    if not len(f):
+        st.info("Nothing in scope right now.")
+        return
+
+    retention = f[f.FEED_TYPE == "RETENTION"]
+    opportunity = f[f.FEED_TYPE == "OPPORTUNITY"]
+    k = st.columns(3)
+    k[0].metric("Needs attention today", len(f))
+    k[1].metric("Retention", len(retention))
+    k[2].metric("Opportunity", len(opportunity))
+
+    for _, r in f.iterrows():
+        with st.container(border=True):
+            head, badge = st.columns([4, 1])
+            head.markdown(f"**{r['HEADLINE']}** — {r['FULL_NAME']} (`{r['CUSTOMER_ID']}`)")
+            color = "#B3251E" if r["FEED_TYPE"] == "RETENTION" else "#2E7D52"
+            badge.markdown(fmt.chip(r["FEED_TYPE"], color), unsafe_allow_html=True)
+            st.markdown(fmt.state_badge(r["STATE_NAME"], r["SEVERITY"]), unsafe_allow_html=True)
+            m = st.columns(3)
+            m[0].metric("Relationship", fmt.lakh(r["RELATIONSHIP_VALUE"]))
+            m[1].metric("Score", f"{r['SCORE']:.2f}")
+            m[2].caption(r["DETAIL"])
+            if st.button("Open in Customer 360", key=f"feed_{r['CUSTOMER_ID']}"):
+                st.session_state["cid"] = r["CUSTOMER_ID"]
+                st.session_state["page"] = "c360"
+                st.rerun()
+
+
 def queue(persona):
     row = _scope(persona)
     st.markdown("### What needs attention")
@@ -539,10 +582,10 @@ def signal_discovery(persona):
                            "WEIGHT": "Weight"})
 
 
-PAGES = {"queue": queue, "approvals": approvals, "c360": customer_360,
+PAGES = {"feed": feed, "queue": queue, "approvals": approvals, "c360": customer_360,
          "portfolio": portfolio, "agent": ask, "config": config,
          "discovery": signal_discovery}
 
 
 def render(page, persona):
-    PAGES.get(page, queue)(persona)
+    PAGES.get(page, feed)(persona)
