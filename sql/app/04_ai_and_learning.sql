@@ -286,12 +286,14 @@ BEGIN
              - (SELECT COUNT(*) FROM CUSTOMER_360_DB.ENGINE.ACTION_OUTCOME o
                 JOIN CUSTOMER_360_DB.APP.RUN_ARTIFACT ra
                   ON ra.object_id = o.outcome_id AND ra.object_type='OUTCOME' AND ra.run_id=:P_RUN_ID
-                WHERE o.action_id = ae.action_id AND o.success = TRUE)),
+                WHERE o.action_id = ae.action_id AND o.state_before = ae.state_id
+                  AND o.domain = ae.domain_id AND o.success = TRUE)),
            total_count = GREATEST(0, ae.total_count
              - (SELECT COUNT(*) FROM CUSTOMER_360_DB.ENGINE.ACTION_OUTCOME o
                 JOIN CUSTOMER_360_DB.APP.RUN_ARTIFACT ra
                   ON ra.object_id = o.outcome_id AND ra.object_type='OUTCOME' AND ra.run_id=:P_RUN_ID
-                WHERE o.action_id = ae.action_id)),
+                WHERE o.action_id = ae.action_id AND o.state_before = ae.state_id
+                  AND o.domain = ae.domain_id)),
            last_updated = CURRENT_TIMESTAMP()
      WHERE ae.action_id IN (SELECT o.action_id FROM CUSTOMER_360_DB.ENGINE.ACTION_OUTCOME o
             JOIN CUSTOMER_360_DB.APP.RUN_ARTIFACT ra

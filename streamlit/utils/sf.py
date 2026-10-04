@@ -187,6 +187,21 @@ def queue(persona_scope, assigned_user="rm1", team="team_alpha"):
                [persona_scope, assigned_user or "", team or ""])
 
 
+def executions(cid=None):
+    """
+    Actions actually carried out, newest first. Undoing a run deletes its rows,
+    so this is always the live status — what an RM sees after a manager approves.
+    """
+    return _df(f"""
+        SELECT customer_id, action_id, action_name, execution_type, executed_by,
+               approved_by, status, executed_at
+        FROM {DB}.ENGINE.ACTION_EXECUTION
+        {"WHERE customer_id = ?" if cid else ""}
+        ORDER BY executed_at DESC
+    """, [cid] if cid else None)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
 def pending_approvals(persona_scope, persona, assigned_user="rm1", team="team_alpha"):
     """Every customer in scope with a top candidate that needs sign-off — Snowpark proc."""
     return _df(f"""CALL {DB}.APP.PENDING_APPROVALS(?, ?, ?, ?)""",
@@ -734,7 +749,7 @@ def run_chat(question, persona, history=None):
         result['tool'] = 'get_customer_360'
         df = chat_get_customer_360(cid)
         result['data'] = df.to_dict('records')
-        result['answer'] = chat_compose(question, intent, result['data'], history)
+        result['answer'] = chat_compose(question, intent, result['data'], cid)
 
     elif intent == 'SUMMARY':
         result['tool'] = 'summarize_customer'
@@ -746,37 +761,37 @@ def run_chat(question, persona, history=None):
         result['tool'] = 'recommend_action'
         df = recommend(cid, persona, 0)
         result['data'] = df.to_dict('records')
-        result['answer'] = chat_compose(question, intent, result['data'], history)
+        result['answer'] = chat_compose(question, intent, result['data'], cid)
 
     elif intent == 'PRODUCT_RECOMMEND':
         result['tool'] = 'recommend_product'
         df = recommend_product(cid)
         result['data'] = df.to_dict('records')
-        result['answer'] = chat_compose(question, intent, result['data'], history)
+        result['answer'] = chat_compose(question, intent, result['data'], cid)
 
     elif intent == 'SERVICE_RECOVERY':
         result['tool'] = 'recommend_service'
         df = recommend_service(cid)
         result['data'] = df.to_dict('records')
-        result['answer'] = chat_compose(question, intent, result['data'], history)
+        result['answer'] = chat_compose(question, intent, result['data'], cid)
 
     elif intent == 'PRODUCT_SEARCH':
         result['tool'] = 'search_products'
         res = search_products(route['search_query'] or question, limit=5)
         result['data'] = res
-        result['answer'] = chat_compose(question, intent, res, history)
+        result['answer'] = chat_compose(question, intent, res)
 
     elif intent == 'INTERACTION_SEARCH':
         result['tool'] = 'interaction_search'
         res = search_interactions(route['search_query'] or question, limit=5)
         result['data'] = res
-        result['answer'] = chat_compose(question, intent, res, history)
+        result['answer'] = chat_compose(question, intent, res)
 
     elif intent == 'DECISION_QUEUE':
         result['tool'] = 'get_decision_queue'
         df = queue('ALL')
         result['data'] = df.to_dict('records')
-        result['answer'] = chat_compose(question, intent, result['data'], history)
+        result['answer'] = chat_compose(question, intent, result['data'], cid)
 
     else:
         result['answer'] = (
@@ -788,20 +803,36 @@ def run_chat(question, persona, history=None):
     return result
 
 
-def chat_compose(question, intent, facts, history=None):
+def chat_compose(question, intent, facts, cid=None):
     """
     Turn a tool's structured output into a short natural-language answer,
     strictly grounded — the facts dict/list is the only source of truth
     the model is given, so it cannot add a recommendation that isn't there.
+
+    The customer the facts belong to is stated explicitly. Earlier turns are
+    deliberately NOT passed here: they are only needed to route a follow-up,
+    and showing them to the writer made it attribute the new rows to the
+    previous customer.
     """
+    who = ""
+    if cid:
+        c = customer(cid)
+        name = c["FULL_NAME"] if c is not None else cid
+        who = f"CUSTOMER: {name} ({cid}). Every row in the facts below is about this customer.\n\n"
+    rows = facts if isinstance(facts, list) else []
+    suppressed = [r for r in rows if isinstance(r, dict) and r.get("SUPPRESSED") is True]
+    held_back = ""
+    if suppressed:
+        held_back = ("These options are being held back for this customer. Lead with that and "
+                     f"explain why in plain words: {suppressed[0].get('SUPPRESSION_REASON')}. ")
     prompt = (
-        "Answer this relationship-manager question in 2-4 sentences, using ONLY the facts given. "
-        "Never state a number, product, or action that is not present in the facts. If the facts "
-        "are empty, say plainly that nothing matched rather than guessing. Write for a busy "
-        "relationship manager: plain English, no jargon, no database or system names. The "
-        "conversation is shown only so your reply reads as a natural follow-up — every figure "
-        "you state must still come from the facts below.\n\n"
-        + _history_block(history, max_turns=4) +
+        "You are advising a relationship manager about one of their customers. Answer in 2-4 "
+        "sentences, using ONLY the facts given, and speak about the customer in the third person "
+        "by name. The first row is the top recommendation; name it first. Never state a number, "
+        "product, or action that is not present in the facts. If the facts are empty, say plainly "
+        "that nothing matched rather than guessing. " + held_back +
+        "Plain English, no jargon, no database or system names.\n\n"
+        + who +
         f"QUESTION: {question}\n\nINTENT: {intent}\n\nFACTS (JSON):\n{json.dumps(facts, default=str)[:4000]}"
     )
     for _attempt in range(2):

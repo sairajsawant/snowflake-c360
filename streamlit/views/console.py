@@ -164,6 +164,8 @@ def approvals(persona):
     st.caption("Recommended actions that cost more than a relationship manager can authorise "
                "on their own, so they need your sign-off before they can go ahead.")
 
+    done = sf.executions()
+    done_keys = {(r.CUSTOMER_ID, r.ACTION_ID) for r in done.itertuples()}
     for _, p in pending.iterrows():
         with st.container(border=True):
             auth = sf.authority(p["ACTION_ID"], persona, 0)
@@ -177,10 +179,25 @@ def approvals(persona):
             m[1].metric("Track record", fmt.pct(p["EFFECTIVENESS_RATE"]))
             m[2].metric("Needs authority", fmt.inr(auth.get("needed")))
             m[3].metric("Your ceiling", fmt.inr(auth.get("persona_limit")))
-            if not auth.get("authorised"):
+            key = (p["CUSTOMER_ID"], p["ACTION_ID"])
+            if key in done_keys:
+                note = st.session_state.get(f"approved_{key}", "")
+                st.success(f"**Approved and carried out.** {note}".strip())
+            elif not auth.get("authorised"):
                 st.error("This is above your approval limit — escalate to a VP Executive.")
-            st.caption("To approve and carry this out end to end, open it in Scenario Studio — "
-                       "actions taken there are fully reversible.")
+            elif st.button("Approve", key=f"approve_{p['CUSTOMER_ID']}_{p['ACTION_ID']}",
+                           type="primary"):
+                with st.spinner("Approving and carrying it out…"):
+                    run_id = sf.start_run(p["CUSTOMER_ID"], persona, "approval")
+                    ex = sf.execute_action(p["CUSTOMER_ID"], p["ACTION_ID"], persona, 0,
+                                           "Approved from the Approvals queue", run_id)
+                if ex.get("status") == "EXECUTED":
+                    se = ex.get("side_effect")
+                    st.session_state[f"approved_{key}"] = (
+                        f"{se[0].upper()}{se[1:]}." if se and se != "none" else "")
+                    st.rerun()
+                else:
+                    st.error(f"{ex.get('status')} — {ex.get('reason')}")
 
 
 def customer_360(persona):
@@ -230,8 +247,10 @@ def customer_360(persona):
     for kind, msg in alerts:
         (st.error if kind == "critical" else st.warning)(msg)
 
+    next_best(cid, persona, p)
+
     tabs = st.tabs(["Why this state", "Timeline", "Tickets", "Email", "Policy history",
-                    "Regulatory", "Recommendation"])
+                    "Regulatory"])
 
     with tabs[0]:
         st.caption("Everything that put this customer in their current state, and how much "
@@ -317,19 +336,120 @@ def customer_360(persona):
             st.caption("Portability is a regulated process with forms and deadlines — so this "
                        "is an observed act, not an inference from tone.")
 
-    with tabs[6]:
-        recs = sf.recommend(cid, persona, 0)
-        if len(recs):
-            st.dataframe(recs[["RANKING", "ACTION_NAME", "POLICY_STATUS", "SCORE",
-                               "EFFECTIVENESS_RATE", "SAMPLE_SIZE", "EXPECTED_VALUE"]],
-                         hide_index=True, use_container_width=True)
-            st.caption(f"Ranked for **{persona.replace('_', ' ')}**. Different roles weigh "
-                       "cost and value differently, so switching role in the sidebar can "
-                       "reorder this.")
-        else:
-            st.info("Nothing is recommended for this customer right now. Their situation "
-                    "doesn't match any approved action, and we'd rather say nothing than "
-                    "invent an intervention.")
+
+def _reasons(text):
+    """'product_interest=super_topup_cover, tenure_segment=MATURE' -> plain words."""
+    out = []
+    for part in str(text or "").split(","):
+        if "=" in part:
+            k, v = [x.strip() for x in part.split("=", 1)]
+            out.append(f"{k.replace('_', ' ')}: {v.replace('_', ' ').lower()}")
+    return out
+
+
+def next_best(cid, persona, prof):
+    """
+    The decision, readable at a glance and actionable in place: the top retention
+    action (with a button to carry it out, within the role's authority) beside the
+    best-fit product for first buy or renewal (or why it's being held back).
+    """
+    st.markdown("#### Next best action")
+    left, right = st.columns(2)
+
+    # ── keep the customer: retention / servicing action ─────────────────────
+    with left:
+        with st.container(border=True):
+            st.markdown(fmt.chip("Keep", "#B3251E"), unsafe_allow_html=True)
+            recs = sf.recommend(cid, persona, 0)
+            done = None
+            ex = sf.executions(cid)
+            if len(ex):
+                e = ex.iloc[0]
+                names = dict(zip(sf.personas()["PERSONA_ID"], sf.personas()["PERSONA_NAME"]))
+                who = names.get(e["APPROVED_BY"] or e["EXECUTED_BY"], e["APPROVED_BY"] or e["EXECUTED_BY"])
+                sess = st.session_state.get(f"c360_done_{cid}") or {}
+                done = {"action": e["ACTION_NAME"], "action_id": e["ACTION_ID"],
+                        "by": (f"Approved by {who}" if e["EXECUTION_TYPE"] == "APPROVED"
+                               else f"Carried out by {who}"),
+                        "side_effect": sess.get("side_effect", ""),
+                        "message": sess.get("message")}
+            if not len(recs):
+                st.markdown("**No intervention needed**")
+                st.caption("Nothing in their situation matches an approved action, so the "
+                           "platform recommends nothing rather than inventing one.")
+            elif done:
+                st.markdown(f"### {done['action']}")
+                st.success(f"**{done['by']}** and carried out. {done.get('side_effect') or ''}".strip())
+                if done.get("message"):
+                    st.caption("Customer notified: " + done["message"])
+                if st.button("Write my call brief", key=f"brief_{cid}"):
+                    with st.spinner("Writing the brief from this customer's own evidence…"):
+                        st.session_state[f"c360_brief_{cid}"] = sf.call_brief(cid, done["action_id"], 0)
+                if st.session_state.get(f"c360_brief_{cid}"):
+                    with st.expander("Call brief", expanded=True):
+                        st.markdown(st.session_state[f"c360_brief_{cid}"])
+            else:
+                top = recs.iloc[0]
+                auth = sf.authority(top["ACTION_ID"], persona, 0)
+                st.markdown(f"### {top['ACTION_NAME']}")
+                st.caption(f"Worked for **{fmt.pct(top['EFFECTIVENESS_RATE'])}** of similar "
+                           f"customers ({int(top['SAMPLE_SIZE'])} cases).")
+                m = st.columns(2)
+                m[0].metric("Expected value", fmt.inr(top["EXPECTED_VALUE"]))
+                m[1].metric("Cost", fmt.inr(top["TOTAL_COST"]))
+                needs = bool(auth.get("requires_approval"))
+                allowed = (not needs) or bool(auth.get("authorised"))
+                if needs and not allowed:
+                    st.warning("Needs Team Lead sign-off — it's waiting in their Approvals.")
+                elif needs:
+                    st.caption("Needs approval, and you have the authority.")
+                else:
+                    st.caption("Within your authority — you can act now.")
+                label = "Approve and carry out" if needs else "Carry it out"
+                if st.button(label, key=f"act_{cid}", type="primary", disabled=not allowed):
+                    with st.spinner("Carrying it out and notifying the customer…"):
+                        run_id = sf.start_run(cid, persona, "console")
+                        ex = sf.execute_action(cid, top["ACTION_ID"], persona, 0,
+                                               "Actioned from Customer 360", run_id)
+                    if ex.get("status") == "EXECUTED":
+                        st.session_state[f"c360_done_{cid}"] = {
+                            "action": top["ACTION_NAME"], "action_id": top["ACTION_ID"],
+                            "side_effect": (f"{ex['side_effect'][0].upper()}{ex['side_effect'][1:]}."
+                                            if ex.get("side_effect") and ex["side_effect"] != "none" else ""),
+                            "message": ex.get("message")}
+                        sf.clear_caches()
+                        st.rerun()
+                    else:
+                        st.error(f"{ex.get('status')} — {ex.get('reason')}")
+                if len(recs) > 1:
+                    others = ", ".join(recs["ACTION_NAME"].iloc[1:3])
+                    st.caption(f"Also considered: {others}")
+
+    # ── grow the customer: best product for first buy / renewal ─────────────
+    with right:
+        with st.container(border=True):
+            st.markdown(fmt.chip("Grow", "#2E7D52"), unsafe_allow_html=True)
+            prods = sf.recommend_product(cid)
+            if not len(prods):
+                st.markdown("**No product fits yet**")
+                st.caption("None of the catalogue matches what we know about this customer.")
+            else:
+                pr = prods.iloc[0]
+                if bool(pr["SUPPRESSED"]):
+                    st.markdown(f"**Hold the upsell** · {pr['PRODUCT_NAME']}")
+                    st.caption("This customer is at risk, so retention comes before any offer. "
+                               "The product will be suggested once they're stable.")
+                else:
+                    st.markdown(f"### {pr['PRODUCT_NAME']}")
+                    st.caption(f"{pr['PRODUCT_TYPE']} · best fit for first buy or renewal")
+                    why = _reasons(pr["MATCH_REASONS"])
+                    if why:
+                        st.markdown("**Why it fits**")
+                        for w in why:
+                            st.markdown(f"- {w}")
+                    st.caption(f"Accepted by {fmt.pct(pr['ACCEPTANCE_RATE'])} of customers it "
+                               f"was offered to.")
+    st.write("")
 
 
 def portfolio(persona):
@@ -456,8 +576,11 @@ def ask(persona):
         # before this turn is appended, so the model never sees the live question twice.
         history = list(st.session_state["chat_history"])
         st.session_state["chat_history"].append({"role": "user", "content": q})
-        with st.spinner("Working on it…"):
-            result = sf.run_chat(q, persona, history)
+        with st.chat_message("user"):
+            st.markdown(q)
+        with st.chat_message("assistant"):
+            with st.spinner("Working on it…"):
+                result = sf.run_chat(q, persona, history)
         st.session_state["chat_history"].append({
             "role": "assistant", "content": result["answer"], "tool": result["tool"],
             "customer_id": result["customer_id"], "data": result["data"],
@@ -475,7 +598,7 @@ def config(persona):
     st.markdown("### Change behaviour without shipping code")
     if not row["CAN_CONFIGURE"]:
         st.info(f"{row['PERSONA_NAME']} has read-only access to configuration. "
-                "Switch to Analyst in the sidebar.")
+                "Switch to Analyst / Domain Expert in the sidebar.")
 
     st.markdown("##### How recommendations are weighted")
     st.dataframe(sf.scoring_weights(), hide_index=True, use_container_width=True)
@@ -550,7 +673,7 @@ def signal_discovery(persona):
         lo = cand[cand.PRIORITY == "LOW"]
 
         if not row["CAN_CONFIGURE"]:
-            st.caption(f"{row['PERSONA_NAME']} has read-only access here — switch to Analyst "
+            st.caption(f"{row['PERSONA_NAME']} has read-only access here — switch to Analyst / Domain Expert "
                        "in the sidebar to promote or dismiss.")
 
         if len(hi):

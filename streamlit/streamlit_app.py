@@ -50,7 +50,7 @@ SCENARIOS = {
 
 STEPS = ["Stage event", "Detect", "Understand", "Decide", "Act", "Learn"]
 
-DEFAULTS = dict(mode="studio", persona="rm1", page="feed",
+DEFAULTS = dict(mode="console", persona="rm1", page="feed",
                 scenario="A", step=0, cid="INS-1011", offer=0, run_id=None,
                 compose="sample", situation="", draft="", transcript_id=None,
                 extracted=None, state_result=None, chosen=None, exec_result=None,
@@ -73,37 +73,71 @@ def reset_run(keep_scenario=True):
         st.session_state["scenario"] = "A"
 
 
+def role_picker(key=None):
+    """'Acting as' selector + what that role may do. Returns the persona row."""
+    pdf = sf.personas()
+    opts = list(pdf["PERSONA_ID"])
+    labels = dict(zip(pdf["PERSONA_ID"], pdf["PERSONA_NAME"]))
+    if key:
+        # In-page picker: keep it in sync with the role chosen anywhere else, and
+        # push changes back through a callback so the new role applies on rerun.
+        st.session_state[key] = st.session_state["persona"]
+
+        def _sync():
+            st.session_state["persona"] = st.session_state[key]
+
+        st.selectbox("Acting as", opts, format_func=lambda p: labels.get(p, p),
+                     key=key, on_change=_sync)
+    else:
+        st.session_state["persona"] = st.selectbox(
+            "Acting as", opts, index=opts.index(st.session_state["persona"]),
+            format_func=lambda p: labels.get(p, p))
+    prow = pdf[pdf["PERSONA_ID"] == st.session_state["persona"]].iloc[0]
+    lim = float(prow["EFFECTIVE_LIMIT"])
+    st.caption(f"{prow['DATA_SCOPE_TYPE']} scope · "
+               + (f"may approve {fmt.inr(lim)}" if lim else "cannot approve")
+               + (" · may configure" if prow["CAN_CONFIGURE"] else ""))
+    return prow
+
+
 # ─────────────────────────────────────────────────────────────── sidebar ──────
 def sidebar():
     with st.sidebar:
         st.markdown("#### Customer 360 Decisioning Platform")
-        st.caption("wired to live Snowflake")
+        st.caption("AI reads. Rules decide. Outcomes teach.")
 
-        mode = st.radio("Mode", ["Scenario Studio", "Operations Console"],
-                        index=0 if st.session_state["mode"] == "studio" else 1,
+        mode = st.radio("Mode", ["Operations Console", "Scenario Studio"],
+                        index=0 if st.session_state["mode"] == "console" else 1,
                         label_visibility="collapsed")
         st.session_state["mode"] = "studio" if mode == "Scenario Studio" else "console"
 
-        st.divider()
-        pdf = sf.personas()
-        opts = list(pdf["PERSONA_ID"])
-        labels = dict(zip(pdf["PERSONA_ID"], pdf["PERSONA_NAME"]))
-        st.session_state["persona"] = st.selectbox(
-            "Acting as", opts, index=opts.index(st.session_state["persona"]),
-            format_func=lambda p: labels.get(p, p))
-
-        prow = pdf[pdf["PERSONA_ID"] == st.session_state["persona"]].iloc[0]
-        lim = float(prow["EFFECTIVE_LIMIT"])
-        st.caption(f"{prow['DATA_SCOPE_TYPE']} scope · "
-                   + (f"may approve {fmt.inr(lim)}" if lim else "cannot approve")
-                   + (" · may configure" if prow["CAN_CONFIGURE"] else ""))
-
         if st.session_state["mode"] == "console":
             st.divider()
-            pages = {"feed": "My Feed", "queue": "Decision Queue", "approvals": "Approvals",
-                     "c360": "Customer 360", "portfolio": "Portfolio & Learning",
-                     "agent": "Ask the data", "config": "Config Studio",
-                     "discovery": "Signal Discovery"}
+            prow = role_picker()
+            st.divider()
+            all_pages = {"feed": "My Feed", "queue": "Decision Queue", "approvals": "Approvals",
+                         "c360": "Customer 360", "portfolio": "Portfolio & Learning",
+                         "agent": "Ask the data", "config": "Config Studio",
+                         "discovery": "Signal Discovery"}
+            # Each role sees the pages its permissions allow, read from the persona row:
+            # approvers get Approvals, configurers get Config Studio and Signal
+            # Discovery, anyone beyond their own book gets the portfolio view, and
+            # the analyst (configures, approves nothing) works the book, not a feed.
+            can_approve, can_config = bool(prow["CAN_APPROVE"]), bool(prow["CAN_CONFIGURE"])
+            wide = prow["DATA_SCOPE_TYPE"] != "ASSIGNED"
+            allowed = {
+                "feed": not (can_config and not can_approve),
+                "queue": True,
+                "approvals": can_approve,
+                "c360": True,
+                "portfolio": wide,
+                "agent": True,
+                "config": can_config,
+                "discovery": can_config,
+            }
+            pages = {k: v for k, v in all_pages.items() if allowed[k]}
+            if st.session_state["page"] not in pages:
+                st.session_state["page"] = next(iter(pages))
             st.session_state["page"] = st.radio(
                 "View", list(pages), format_func=lambda k: pages[k],
                 index=list(pages).index(st.session_state["page"]),
@@ -484,6 +518,9 @@ def step_understand():
 def step_decide():
     st.info("**You are here:** ranking what could be done, and checking whether you are "
             "allowed to do it. Every number below is arithmetic you can follow.")
+    rc, _ = st.columns([1, 2])
+    with rc:
+        role_picker("studio_role_decide")
     cid = st.session_state["cid"]
     persona = st.session_state["persona"]
 
@@ -596,7 +633,7 @@ def step_decide():
     else:
         st.error(f"**Above your authority.** Needs {fmt.inr(auth['needed'])} but "
                  f"{persona.replace('_', ' ')} may approve only "
-                 f"{fmt.inr(auth['persona_limit'])}. Switch role in the sidebar.")
+                 f"{fmt.inr(auth['persona_limit'])}. Switch to Team Lead above to approve it.")
     auto = recs[~recs["REQUIRES_APPROVAL"]]
     if len(auto) and recs.iloc[0]["REQUIRES_APPROVAL"]:
         b = auto.iloc[0]
@@ -616,6 +653,9 @@ def step_decide():
 def step_act():
     st.info("**You are here:** doing the thing — and if a person must sign off, being "
             "that person.")
+    rc, _ = st.columns([1, 2])
+    with rc:
+        role_picker("studio_role_act")
     cid, persona = st.session_state["cid"], st.session_state["persona"]
     chosen = st.session_state["chosen"]
 
@@ -628,8 +668,8 @@ def step_act():
 
     if st.session_state["exec_result"] is None:
         if auth.get("requires_approval") and not auth.get("authorised"):
-            st.error(f"This needs authority of {fmt.inr(auth['needed'])}. Switch to a role "
-                     "that can approve it in the sidebar, then come back.")
+            st.error(f"This needs authority of {fmt.inr(auth['needed'])}. Switch to Team Lead "
+                     "above to approve it.")
             nav(can_advance=False)
             return
         label = "Approve and execute" if auth.get("requires_approval") else "Execute"
@@ -745,7 +785,7 @@ def step_learn():
             st.caption(f"The simulated call closed as **{sim['disposition']}** — override "
                        "if you disagree.")
         if st.button("Record outcome", type="primary"):
-            with st.spinner("Writing ACTION_OUTCOME and recomputing effectiveness…"):
+            with st.spinner("Recording the outcome and updating the track record…"):
                 st.session_state["outcome_result"] = sf.record_outcome(
                     cid, chosen, pick, sf.customer(cid)["STATE_ID"],
                     st.session_state["run_id"])

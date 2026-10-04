@@ -54,7 +54,7 @@ if THEME == "snowflake":
 # official Snowflake icons, lifted as vectors from the brand template
 ICON_FOR = {
     "Scattered data": "Integrated Data", "Missed warnings": "Alert", "Inconsistent action": "Consolidate",
-    "Relationship Manager": "User 1", "Team Lead": "Users", "Analyst": "Data Analytics",
+    "Relationship Manager": "User 1", "Team Lead": "Users", "Analyst / Domain Expert": "Data Analytics",
     "Dynamic Tables": "Dynamic Tables", "Streams & Tasks": "Task", "Snowpark Python": "Snowpark",
     "Semantic View": "Metadata", "AI_COMPLETE": "LLM", "AI_SENTIMENT": "Social",
     "AI_SUMMARIZE": "Document AI", "Cortex Search": "Universal Search",
@@ -66,6 +66,7 @@ ICON_FOR = {
     "Daily time tick": "Time", "Signal fingerprints": "Metadata",
     "Connect real sources": "Kafka Connectors", "Actions in Slack and Jira": "Communicate",
     "Fine-grained access": "Policy", "Cross-domain, any entity": "Enterprise", "AI onboarding wizard": "Idea",
+    "Predictive ML signals": "Machine Learning",
 }
 _ICON_SRC = None
 _ICON_ID = [9000]
@@ -246,7 +247,7 @@ text(s, 6.38, 1.72, 3.0, 0.25, "WHO IT'S FOR", size=9.5, bold=True, color=MUTED)
 people = [
     ("Relationship Manager", "A ranked worklist and the next best action for each customer"),
     ("Team Lead", "Approves larger offers for the team"),
-    ("Analyst", "Tunes signals, weights and rules without code"),
+    ("Analyst / Domain Expert", "Tunes signals, weights and rules without code"),
 ]
 for i, (t, b) in enumerate(people):
     y = 2.08 + i * 0.86
@@ -496,18 +497,19 @@ nxt = [
     ("Fine-grained access", "Extend row access by region and branch, and masking to every new source.", "2–3 days", HEATHER),
     ("Cross-domain, any entity", "The same engines over households, SME accounts or policies, with shared suppression across all of them.", "1–2 weeks", KRAFT),
     ("AI onboarding wizard", "Describe a use case or signal in plain English. AI drafts the configuration and a person approves it.", "1–2 weeks", CLAY),
+    ("Predictive ML signals", "Snowflake ML forecasts which customers are trending toward decline and which product they'll need next, before it shows in a call.", "1–2 weeks", SKY),
 ]
 for i, (t, d, e, c) in enumerate(nxt):
-    y = 1.5 + i * 0.76
-    box(s, 0.45, y, 9.1, 0.66, fill=IVORY)
-    if icon(s, t, 0.58, y + 0.15, 0.36):
-        text(s, 1.08, y + 0.08, 2.25, 0.5, t, size=12.5, bold=True, anchor=MSO_ANCHOR.MIDDLE, color=CARD_TITLE)
+    y = 1.45 + i * 0.645
+    box(s, 0.45, y, 9.1, 0.57, fill=IVORY)
+    if icon(s, t, 0.58, y + 0.11, 0.34):
+        text(s, 1.08, y + 0.04, 2.25, 0.5, t, size=12.5, bold=True, anchor=MSO_ANCHOR.MIDDLE, color=CARD_TITLE)
     else:
         dot(s, 0.65, y + 0.25, 0.16, c)
         text(s, 0.95, y + 0.08, 2.4, 0.5, t, size=12.5, bold=True, anchor=MSO_ANCHOR.MIDDLE)
-    text(s, 3.35, y + 0.06, 4.55, 0.55, d, size=10.5, color=MUTED, anchor=MSO_ANCHOR.MIDDLE)
-    box(s, 8.05, y + 0.16, 1.35, 0.34, fill=OAT, radius=0.5)
-    text(s, 8.05, y + 0.16, 1.35, 0.34, e, size=9.5, bold=True, align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
+    text(s, 3.35, y + 0.03, 4.55, 0.51, d, size=10, color=MUTED, anchor=MSO_ANCHOR.MIDDLE)
+    box(s, 8.05, y + 0.12, 1.35, 0.33, fill=OAT, radius=0.5)
+    text(s, 8.05, y + 0.12, 1.35, 0.33, e, size=9.5, bold=True, align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
 
 # ---------------------------------------------------------------------------
 # 18 · demo
