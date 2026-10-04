@@ -14,6 +14,8 @@ learns from every outcome. Everything runs inside Snowflake.
 
 | | |
 |---|---|
+| **Demo video** | [Watch on YouTube](https://www.youtube.com/watch?v=HyYcURLRBt8) |
+| **Presentation** | [Submission deck (PDF)](https://drive.google.com/file/d/1bszmRAkVNPa9-gPzX-5PgR6zFWfmVpD1/view?usp=drive_link) |
 | **App** | [Customer 360 Decisioning Platform](https://app.snowflake.com/KRYZXYH/eg26106/#/streamlit-apps/CUSTOMER_360_DB.APP.CUSTOMER_360_APP) |
 | **Account** | `KRYZXYH-EG26106` |
 | **User** | `C360_JUDGE` |

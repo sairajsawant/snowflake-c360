@@ -377,10 +377,10 @@ for i, (t, d) in enumerate(studio):
     text(s, 1.1, y + 0.03, 3.7, 0.3, [[(t, {"bold": True}), ("  " + d, {"color": MUTED, "size": 10.5})]], size=11.5)
 box(s, 5.1, 1.5, 4.45, 3.75, fill=IVORY, line=RULE)
 text(s, 5.33, 1.64, 4.0, 0.3, "Operations Console", size=14, bold=True, font=SERIF)
-text(s, 5.33, 1.95, 4.0, 0.25, "Day-to-day product, scoped to the role you pick", size=10.5, color=MUTED)
+text(s, 5.33, 1.95, 4.0, 0.25, "Each role sees only the pages it's allowed to use", size=10.5, color=MUTED)
 console = [
     ("My Feed", "today's ranked worklist"), ("Decision Queue", "by severity and value"),
-    ("Approvals", "offers waiting on you"), ("Customer 360", "profile, evidence, timeline"),
+    ("Approvals", "one-click manager sign-off"), ("Customer 360", "next best action, act in place"),
     ("Portfolio & Learning", "value at risk, what works"), ("Ask the data", "chat that remembers context"),
     ("Config Studio", "weights, limits, rules"), ("Signal Discovery", "daily suggestions"),
 ]
@@ -530,7 +530,8 @@ for i, (cap, t, d, f) in enumerate(cols):
 box(s, 0.45, 4.12, 9.1, 1.08, fill=IVORY, line=RULE)
 text(s, 0.68, 4.25, 8.7, 0.25, "THEN IN THE APP", size=9.5, bold=True, color=MUTED)
 text(s, 0.68, 4.55, 8.7, 0.55,
-     "My Feed across all three engines  ·  the full loop in Scenario Studio  ·  a follow-up chat that remembers who you asked about",
+     "My Feed across all three engines  ·  act straight from Customer 360  ·  a chat that remembers context  ·  "
+     "the full loop in Scenario Studio  ·  one-click manager approval",
      size=12)
 
 # ---------------------------------------------------------------------------
@@ -545,4 +546,50 @@ ids.remove(thanks_el)
 ids.append(thanks_el)
 
 prs.save(OUT)
+
+
+def shrink_photos(path, min_bytes=1_000_000, quality=92):
+    """
+    The template's title and thank-you backgrounds are photographs stored as
+    lossless PNG (~4.8 MB of the deck). Re-encode only those as high-quality
+    JPEG — visually identical for photos — and leave the diagrams as lossless
+    PNG so they stay sharp. Keeps the exported PDF well under 5 MB.
+    """
+    import io, re, zipfile
+    from PIL import Image
+    zin = zipfile.ZipFile(path)
+    files = {i.filename: zin.read(i.filename) for i in zin.infolist()}
+    infos = {i.filename: i for i in zin.infolist()}
+    zin.close()
+    renamed = {}
+    for name, data in list(files.items()):
+        if name.startswith("ppt/media/") and name.endswith(".png") and len(data) > min_bytes:
+            im = Image.open(io.BytesIO(data)).convert("RGB")
+            buf = io.BytesIO()
+            im.save(buf, "JPEG", quality=quality, subsampling=0, optimize=True)
+            new = name[:-4] + ".jpeg"
+            files[new] = buf.getvalue()
+            del files[name]
+            renamed[name.split("/")[-1]] = new.split("/")[-1]
+    if not renamed:
+        return
+    for name in list(files):
+        if name.endswith(".rels"):
+            x = files[name].decode("utf8")
+            for old, new in renamed.items():
+                x = x.replace(f"media/{old}\"", f"media/{new}\"")
+            files[name] = x.encode("utf8")
+    ct = files["[Content_Types].xml"].decode("utf8")
+    if 'Extension="jpeg"' not in ct:
+        ct = ct.replace("<Default ", '<Default Extension="jpeg" ContentType="image/jpeg"/><Default ', 1)
+    files["[Content_Types].xml"] = ct.encode("utf8")
+    zout = zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED)
+    order = ["[Content_Types].xml"] + [n for n in files if n != "[Content_Types].xml"]
+    for n in order:
+        zout.writestr(n, files[n])
+    zout.close()
+    print("re-encoded photos:", ", ".join(f"{k} -> {v}" for k, v in renamed.items()))
+
+
+shrink_photos(OUT)
 print("wrote", OUT, "with", len(prs.slides), "slides")
