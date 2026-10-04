@@ -22,6 +22,12 @@ learns from every outcome. Everything runs inside Snowflake.
 | **Password** | `N!#^la4M#5ypy1` |
 | **Role** | `C360_JUDGE` (default) |
 | **Warehouse** | `COMPUTE_WH` (default) |
+| **MFA** | Required. Snowflake asks for MFA setup on first login |
+
+> **First login:** Snowflake requires multi-factor authentication for every Snowsight
+> password login. After you enter the password, follow the prompt to register an
+> authenticator (a passkey or an authenticator app such as Google Authenticator or
+> Duo Mobile), then continue to the app link above.
 
 The judge role can use the app, the Cortex Agent, the semantic view, both Cortex Search
 services and the published CoCo CLI skills. Runs you make in the app are recorded and
