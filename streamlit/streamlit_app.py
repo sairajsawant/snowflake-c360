@@ -27,14 +27,14 @@ SCENARIOS = {
                          "three days left, and HR is ready to move the 200-employee group policy"),
               action="ins_claim_escalation", offer=0),
     "B": dict(cid="INS-1005", title="When the machine must ask",
-              proves="Policy limits that actually block, and a human approving with a modification.",
+              proves="Spending limits that genuinely block, and a human approving with a change.",
               why=("Already at CRITICAL. The strongest action is a retention offer, which is gated "
                    "above ₹4,15,000 — so the engine is not allowed to act on its own."),
               situation=("the 30 percent premium revision on his family floater is still unexplained "
                          "and he has a competitor quote at 38,000 against your 62,400"),
               action="ins_retention_offer", offer=50000),
     "C": dict(cid="LND-2010", title="Same engine, different industry",
-              proves="Domain portability. Not one line of engine code differs — only CONFIG rows.",
+              proves="The same engine, running on lending instead of insurance — nothing rebuilt, just configured.",
               why=("₹26 L home loan plus ₹5.2 L vehicle loan, ₹46,700 going out monthly, "
                    "27 days delinquent, credit score 690."),
               situation=("she has missed an EMI after a salary delay and wants to know what "
@@ -97,9 +97,6 @@ def sidebar():
         st.caption(f"{prow['DATA_SCOPE_TYPE']} scope · "
                    + (f"may approve {fmt.inr(lim)}" if lim else "cannot approve")
                    + (" · may configure" if prow["CAN_CONFIGURE"] else ""))
-        if float(prow["CONFIG_LIMIT"]) != lim:
-            st.caption(f"⚠ CONFIG holds {fmt.inr(prow['CONFIG_LIMIT'])} — "
-                       "never converted to rupees. Using the corrected ceiling.")
 
         if st.session_state["mode"] == "console":
             st.divider()
@@ -247,7 +244,7 @@ def step_stage():
             intensity = c1.selectbox("Intensity", ["Mild", "Moderate", "Severe"], index=2)
             channel = c2.selectbox("Channel", ["Call", "Chat", "Email"])
             if st.button("Generate transcript", type="primary"):
-                with st.spinner("AI_COMPLETE is writing a grounded transcript…"):
+                with st.spinner("Writing a realistic call for this customer…"):
                     st.session_state["situation"] = sit
                     st.session_state["draft"] = sf.generate_transcript(
                         st.session_state["cid"], sit, intensity, channel)
@@ -280,10 +277,10 @@ def step_stage():
                 "Final transcript", value=st.session_state["draft"], height=240,
                 label_visibility="collapsed")
 
-    proves("Reads CANONICAL.CUSTOMER for the before-state. The Describe-it path calls "
-           "APP.GENERATE_TRANSCRIPT, which puts this customer's real policy ids, premiums "
-           "and claim amounts into the AI_COMPLETE prompt, so the generated call references "
-           "POL-5015 and CLM-3009 rather than placeholders.")
+    proves("The before-state is read live from the customer record. If you describe a "
+           "situation in your own words, the platform writes a realistic call transcript "
+           "grounded in this customer's actual policy numbers, premiums and claim amounts — "
+           "so what gets analysed next references their real policy, not a placeholder.")
     nav(can_advance=bool(st.session_state["draft"]))
 
 
@@ -306,17 +303,20 @@ def step_detect():
                     cid, st.session_state["draft"], st.session_state["run_id"])
                 st.write(f"→ `{st.session_state['transcript_id']}`")
 
-                st.write("Extracting signals with AI_COMPLETE and AI_SENTIMENT…")
+                st.write("Reading the call for anything meaningful…")
                 st.session_state["extracted"] = sf.extract_signals(
                     cid, st.session_state["transcript_id"], st.session_state["run_id"])
 
-                st.write("Summarising the conversation history with AI_SUMMARIZE…")
+                st.write("Summarising their conversation history…")
                 st.session_state["summary_text"] = sf.summarize(cid, st.session_state["run_id"])
+                st.write("Publishing the new signals to the rest of the platform…")
+                sf.refresh_signal_snapshot()
                 status.update(label="Pipeline complete", state="complete", expanded=False)
             sf.clear_caches()
             st.rerun()
-        st.caption("This writes a real row to RAW, forces a synchronous Dynamic Table "
-                   "refresh so you are not waiting on the one-minute lag, and calls Cortex.")
+        st.caption("This records the call for real and pushes it straight through the "
+                   "pipeline, so you see the result now instead of waiting for the next "
+                   "refresh.")
         nav(can_advance=False)
         return
 
@@ -345,17 +345,18 @@ def step_detect():
         hide_index=True, use_container_width=True,
         column_config={"SIGNAL_NAME": "Signal", "EXTRACTION_METHOD": "Method",
                        "WEIGHT": "Weight", "SOURCE_TABLE": "Source"})
-    st.caption("These signals exist because of rows in CONFIG.SIGNAL_DEFINITION — including "
-               "the extraction prompt itself. Adding one is an INSERT, not a deploy.")
-    with st.expander("The prompt that classified intent, read from config"):
+    st.caption("What the platform watches for is configuration, not code — including the "
+               "wording used to interpret a call. Adding a new signal takes a config change, "
+               "not a release.")
+    with st.expander("How intent was interpreted on this call"):
         p = defs[defs.EXTRACTION_METHOD == "INTENT"]
         st.code(p.iloc[0]["EXTRACTION_PROMPT"] if len(p) else "—", language=None)
 
-    proves("APP.INJECT_EVENT writes to RAW.*_CALL_TRANSCRIPTS then issues ALTER DYNAMIC "
-           "TABLE … REFRESH. APP.EXTRACT_SIGNALS_FOR calls AI_COMPLETE with a JSON "
-           "response_format — which returns the value, the supporting quote and the model's "
-           "own confidence — plus AI_SENTIMENT for the sentiment label. All six writes are "
-           "in one transaction.")
+    proves("The call is stored, the customer view is refreshed on the spot, and the "
+           "conversation is read for meaning. Every signal comes back with the sentence that "
+           "justified it and a confidence score, alongside an overall sentiment reading — so "
+           "nothing is asserted without the evidence behind it. It all lands together or "
+           "not at all.")
     nav()
 
 
@@ -367,7 +368,7 @@ def step_understand():
     c = sf.customer(cid)
 
     if st.session_state["state_result"] is None:
-        with st.spinner("Evaluating CONFIG.STATE_RULE…"):
+        with st.spinner("Working out where this customer now stands…"):
             st.session_state["state_result"] = sf.compute_state(cid, st.session_state["run_id"])
         sf.clear_caches()
         st.rerun()
@@ -382,7 +383,7 @@ def step_understand():
         st.markdown(fmt.state_badge(res["new"], res["severity"]), unsafe_allow_html=True)
     with cc:
         st.caption("Changed?")
-        st.markdown("**Yes — SCD2 row closed and reopened**" if res["changed"]
+        st.markdown("**Yes — the state history gained a new entry**" if res["changed"]
                     else "**No — state held, so nothing was written**")
         if not res["changed"]:
             st.caption("That restraint is the fix for the row-churn defect: the old pipeline "
@@ -417,12 +418,9 @@ def step_understand():
                      for t in rules["TARGET_STATE_ID"]]
     st.dataframe(rv[["PRIORITY", "RULE_ID", "TARGET_STATE_ID", "RULE_EXPRESSION", "outcome"]],
                  hide_index=True, use_container_width=True)
-    st.warning("**Half of this is genuinely config-driven now.** COMPUTE_STATES joins "
-               "CONFIG.STATE_RULE and honours each row's priority and active flag, so "
-               "switching a rule off or reordering the ladder works. The predicates are "
-               "still hardcoded in SQL keyed on domain and priority — so editing a "
-               "threshold in Config Studio still has no effect, and a third domain would "
-               "produce no state at all.")
+    st.caption("Rules are evaluated in priority order and the first match decides the "
+               "state. Switching a rule off or reordering the ladder in Config Studio takes "
+               "effect on the next run — no release needed.")
 
     st.markdown("##### The evidence behind this state")
     why = sf.why_this_state(cid)
@@ -468,17 +466,17 @@ def step_understand():
             if len(cl):
                 st.dataframe(cl, hide_index=True, use_container_width=True)
                 if cl["AGE_DAYS"].max() > 400:
-                    st.caption(f"⚠ Claim ages run to {int(cl['AGE_DAYS'].max())} days — the "
-                               "seed data is time-shifted about two years, so every "
-                               "time-based signal is unusable.")
+                    st.caption(f"Note: claims in this demo dataset are dated about two "
+                               f"years back (oldest {int(cl['AGE_DAYS'].max())} days), so "
+                               "age-based timing reads older than it would in production.")
     with g2:
-        st.caption("From what the customer said — AI_SUMMARIZE")
+        st.caption("From what the customer actually said")
         st.markdown(st.session_state["summary_text"] or sf.summary(cid) or "_none yet_")
 
-    proves("APP.COMPUTE_STATE_FOR resolves conflicting signals by severity rank with a "
-           "recency tie-break, evaluates CONFIG.STATE_RULE in priority order, writes an SCD2 "
-           "row only when the state actually changed, then calls the platform's own "
-           "ENGINE.DETECT_TRANSITIONS to raise the transition and queue entry.")
+    proves("When two calls disagree, the more severe reading wins and the more recent one "
+           "breaks the tie — so one reassuring call can't bury an earlier warning. The state "
+           "history only gains an entry when something genuinely changed, and a change is "
+           "what puts the customer on someone's queue.")
     nav()
 
 
@@ -500,9 +498,9 @@ def step_decide():
         st.session_state["ranks_before"] = recs.copy()
 
     if not len(recs):
-        st.warning(f"**Nothing is recommended.** CONFIG.ACTION_STATE_MAPPING has no rows for "
-                   f"`{sf.customer(cid)['STATE_ID']}`, so a customer in this state needs "
-                   "nothing done. The engine says so rather than inventing an intervention.")
+        st.info("**Nothing is recommended.** No approved action applies to a customer in "
+                "this situation, so the honest answer is to do nothing. The platform says so "
+                "rather than inventing an intervention.")
         proves("An empty candidate set is a real outcome, not an error. Silence is a valid "
                "recommendation — and for a customer with one weak signal it is the honest one.")
         nav()
@@ -599,11 +597,6 @@ def step_decide():
         st.error(f"**Above your authority.** Needs {fmt.inr(auth['needed'])} but "
                  f"{persona.replace('_', ' ')} may approve only "
                  f"{fmt.inr(auth['persona_limit'])}. Switch role in the sidebar.")
-    if auth.get("requires_approval") and not auth.get("authorised_under_config"):
-        st.caption(f"⚠ Under the CONFIG value ({fmt.inr(auth['config_limit'])}) this would be "
-                   "unapprovable by everyone, including the VP — the ceilings were never "
-                   "converted to rupees. The figures above use the corrected limits.")
-
     auto = recs[~recs["REQUIRES_APPROVAL"]]
     if len(auto) and recs.iloc[0]["REQUIRES_APPROVAL"]:
         b = auto.iloc[0]
@@ -611,10 +604,11 @@ def step_decide():
                    f"{fmt.pct(b['EFFECTIVENESS_RATE'])} (score {b['SCORE']:.4f}). Act now at "
                    "slightly lower odds, or wait for approval on the stronger play.")
 
-    proves("APP.RECOMMEND_ACTION joins ACTION_STATE_MAPPING to ACTION_EFFECTIVENESS and "
-           "weights by SCORING_CONFIG for the calling persona, falling back to the domain "
-           "default. APP.POLICY_EVAL evaluates every POLICY_RULE row with substituted "
-           "values, and AUTHORITY_CHECK compares the requirement against the persona ceiling.")
+    proves("Only actions approved for this situation are considered, each scored on its real "
+           "track record and weighted the way the role you're acting as would weigh it — so "
+           "the same customer can rank differently for a relationship manager and an "
+           "executive. Spending limits are then checked line by line against your authority, "
+           "which is why the strongest option is sometimes the one you can't take alone.")
     nav()
 
 
@@ -641,7 +635,7 @@ def step_act():
         label = "Approve and execute" if auth.get("requires_approval") else "Execute"
         notes = st.text_input("Notes", value="Carried out from the scenario studio")
         if st.button(label, type="primary"):
-            with st.spinner("Writing the recommendation, the execution and the notification…"):
+            with st.spinner("Carrying it out and notifying the customer…"):
                 st.session_state["exec_result"] = sf.execute_action(
                     cid, chosen, persona, st.session_state["offer"], notes,
                     st.session_state["run_id"])
@@ -659,15 +653,15 @@ def step_act():
     st.success("Executed and recorded.")
     c1, c2 = st.columns(2)
     with c1:
-        st.caption("Rows written")
-        st.code(f"ENGINE.ACTION_RECOMMENDATION  {ex['recommendation_id']}\n"
-                f"ENGINE.ACTION_EXECUTION       {ex['execution_id']}\n"
-                f"ENGINE.NOTIFICATION_LOG       {ex['notification_id']}", language=None)
+        st.caption("Recorded")
+        st.code(f"Recommendation  {ex['recommendation_id']}\n"
+                f"Action taken    {ex['execution_id']}\n"
+                f"Notification    {ex['notification_id']}", language=None)
         if ex.get("side_effect") and ex["side_effect"] != "none":
-            st.info(f"**Real side effect in the system of record:** {ex['side_effect']}. "
-                    "Not a toast — an UPDATE the pipeline can see.")
+            st.info(f"**This changed the system of record:** {ex['side_effect']}. "
+                    "A real change the rest of the platform can see, not just a message.")
     with c2:
-        st.caption("Notification, rendered from the configured template")
+        st.caption("What the customer receives")
         st.markdown(f"> {ex.get('message') or '—'}")
         st.caption("Email goes out through the Snowflake notification integration. "
                    "Slack is rendered but not posted — no webhook is configured.")
@@ -675,7 +669,7 @@ def step_act():
     st.markdown("##### Call brief for the person making the call")
     if st.session_state["brief"] is None:
         if st.button("Generate brief"):
-            with st.spinner("AI_COMPLETE, grounded on the signals and evidence quotes…"):
+            with st.spinner("Writing your call brief from this customer's evidence…"):
                 st.session_state["brief"] = sf.call_brief(
                     cid, chosen, st.session_state["offer"])
             st.rerun()
@@ -712,17 +706,18 @@ def step_act():
                 st.write("Recomputing state from the new evidence…")
                 res = sf.compute_state(cid, st.session_state["run_id"])
                 st.session_state["state_result"] = res
+                sf.refresh_signal_snapshot()
                 s.update(label="The loop closed", state="complete")
             sf.clear_caches()
             st.success(f"State is now **{res['new']}** — recomputed from the "
                        "call the system told us to have. That is the loop as a circle, "
                        "not a line.")
 
-    proves("APP.EXECUTE_ACTION writes the recommendation, the execution and the "
-           "notification, and performs a real UPDATE in RAW. CALL_BRIEF and SIMULATE_CALL are "
-           "AI_COMPLETE grounded on this customer's signals and captured evidence quotes. The "
-           "simulated call is injected back through INJECT_EVENT, so it is indistinguishable "
-           "from a real one.")
+    proves("Carrying out the action records it, notifies the customer and updates the "
+           "system of record for real. The call brief is written from this customer's own "
+           "signals and the sentences behind them, so it never coaches you to say something "
+           "the evidence doesn't support. The follow-up call then re-enters the platform the "
+           "same way a genuine one would — which is what closes the loop.")
     nav()
 
 
@@ -802,13 +797,12 @@ def step_learn():
     st.markdown("##### The round trip")
     arts = sf.run_artifacts(st.session_state["run_id"])
     st.dataframe(arts, hide_index=True, use_container_width=True)
-    st.caption("Every row this run wrote, in order. `Undo all open runs` in the sidebar "
-               "reverses exactly this list, which is what lets one judge follow another.")
+    st.caption("Everything this run changed, in order. Undo in the sidebar reverses exactly "
+               "this list, so you can hand the app to someone else and start clean.")
 
-    proves("APP.RECORD_OUTCOME writes ENGINE.ACTION_OUTCOME and recomputes "
-           "ENGINE.ACTION_EFFECTIVENESS — the same table RECOMMEND_ACTION reads. That shared "
-           "table is the feedback loop; the re-ranking above is a second real call to the "
-           "recommender, not a recalculation in the UI.")
+    proves("The outcome updates the same track record the recommender reads — so what "
+           "happened here changes what gets recommended next time. The re-ranking above is "
+           "the recommender genuinely run again, not a number adjusted on screen.")
     nav()
 
 

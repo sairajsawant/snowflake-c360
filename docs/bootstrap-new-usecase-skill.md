@@ -152,6 +152,39 @@ data through `RECOMMEND_GENERIC` under a reference domain id
 8 real customers — byte-identical candidate sets, rankings, scores, and
 suppression flags everywhere both returned rows.
 
+### Proven: use case #3 took 19 config rows and no engine code
+
+`sql/app/23_service_recovery.sql` onboarded **Service Recovery** — "what do we
+owe a customer we failed" — using exactly this path. The entire engine is
+1 `DECISION_DOMAIN` row, 5 `DECISION_CANDIDATE` rows and 14 `DECISION_RULE`
+rows. No scoring function, no effectiveness table, no Agent registration was
+written; `RECOMMEND_GENERIC('service_recovery', customer_id)` worked the
+moment the inserts landed.
+
+It was chosen by looking at which signals nothing consumed. The taxonomy has
+three categories and only two had engines — `SERVICE` signals
+(`service_failure`, `unresolved_claim`, `ticket_reopen`, `csat_low`) were
+populated but fed the churn rules only to raise severity. That gap was
+producing two real defects on live data:
+
+- INS-1001, INS-1017, INS-1019 each had an unresolved claim but sat at
+  severity 2, so they appeared on **no feed at all**.
+- LND-2004 and LND-2006 had `csat_low=MEDIUM` and were being recommended a
+  **Top-up Loan** — upselling customers we had just let down. Cross-domain
+  suppression missed it because that only fires at severity >= 3.
+
+Both are fixed, and the retention rows were verified byte-identical before
+and after. **Finding the next use case by asking "which signals does nothing
+act on yet?" is the reusable move here** — it points at real gaps rather than
+plausible-sounding ideas.
+
+Two small code changes were still needed beyond config, and it is worth being
+precise that they are *surfacing*, not deciding: the feed function gained a
+third branch and a `RETENTION -> SERVICE -> OPPORTUNITY` ordering, and the
+chat gained a `SERVICE_RECOVERY` intent (prompt list + guard list + one
+dispatch branch, per step 2's warning about keeping those two in sync).
+Budget for that whenever a new domain needs its own place in the UI.
+
 **STATE_GATED use cases are only partially covered**, and that limit is
 deliberate, not an oversight: `APP.RECOMMEND_GENERIC` supports gating
 candidates against the *existing, shared* `ENGINE.CUSTOMER_STATE` table

@@ -546,29 +546,60 @@ def resolve_customer(mention):
     return None if df.empty else df.iloc[0]["CUSTOMER_ID"]
 
 
-def chat_classify(question):
+def _history_block(history, max_turns=6):
+    """
+    Render the recent conversation as plain text for the classifier, so a
+    follow-up like "what about his renewal?" can be resolved. Only the last
+    few turns, and assistant answers are truncated — this exists to resolve
+    pronouns and ellipsis, not to re-feed the model its own prose.
+    """
+    if not history:
+        return ""
+    lines = []
+    for turn in history[-max_turns:]:
+        who = "RM" if turn.get("role") == "user" else "ASSISTANT"
+        text = str(turn.get("content") or "").strip().replace("\n", " ")
+        if who == "ASSISTANT":
+            text = text[:200]
+        if turn.get("customer_id"):
+            text += f"  [about customer {turn['customer_id']}]"
+        lines.append(f"{who}: {text}")
+    return "CONVERSATION SO FAR (oldest first):\n" + "\n".join(lines) + "\n\n"
+
+
+def chat_classify(question, history=None):
     """
     Route a free-text question to the narrowest tool, mirroring the deployed
     Agent's own orchestration instructions. The model only classifies and
     extracts a raw name/ID mention — it never picks the final answer; a
     deterministic tool call always does that.
+
+    `history` lets a follow-up inherit the subject of the conversation
+    ("what product suits him?"). It only ever widens what the model can
+    resolve a mention to — the intent vocabulary stays the same fixed list,
+    and whoever it names is still resolved against the customer table by SQL.
     """
     prompt = (
+        _history_block(history) +
         "Classify this question from a relationship manager about a customer-360 "
         "insurance/lending platform. Pick exactly one intent from this fixed list:\n"
         "PROFILE - a plain request for a customer's profile/demographics/current state, nothing more\n"
         "SUMMARY - asks to summarize a customer or catch up on their history\n"
         "ACTION_RECOMMEND - asks what retention/servicing action to take for an at-risk customer\n"
         "PRODUCT_RECOMMEND - asks what product/offer/upsell/renewal personalization fits a customer\n"
+        "SERVICE_RECOVERY - asks how to make good on a service failure, complaint, stuck or unresolved claim, repeated ticket, or a customer we have let down\n"
         "PRODUCT_SEARCH - asks about a product's features, terms or price, not tied to one customer\n"
         "INTERACTION_SEARCH - asks to find past calls, tickets or emails about a topic\n"
         "DECISION_QUEUE - asks who needs attention across the portfolio, not one customer\n"
         "UNKNOWN - none of the above fit\n\n"
-        "Also extract any specific customer name or ID mentioned, verbatim. If the question only "
-        "refers to a customer generically with no specific name or ID, return JSON null (not the "
-        "string \"null\") for customer_mention. Also extract a cleaned search phrase if the intent "
-        "is a search, else JSON null for search_query. ALWAYS include all three keys — intent, "
-        "customer_mention, search_query — in the output, even when a value is null.\n\n"
+        "Also extract any specific customer name or ID mentioned, verbatim. If the question refers "
+        "to a customer only by a pronoun or shorthand (\"he\", \"her\", \"that customer\", \"them\") "
+        "and the conversation above was about a specific customer, return THAT customer's id or "
+        "name. If no specific customer is identifiable from either the question or the "
+        "conversation, return JSON null (not the string \"null\") for customer_mention. Also "
+        "extract a cleaned search phrase if the intent is a search, else JSON null for "
+        "search_query. ALWAYS include all three keys — intent, customer_mention, search_query — "
+        "in the output, even when a value is null.\n\n"
         f"QUESTION: {question}"
     )
     # customer_mention/search_query must be in `required` — otherwise the model
@@ -640,8 +671,8 @@ def chat_classify(question):
             return None
         return v
 
-    valid = {'PROFILE','SUMMARY','ACTION_RECOMMEND','PRODUCT_RECOMMEND','PRODUCT_SEARCH',
-             'INTERACTION_SEARCH','DECISION_QUEUE','UNKNOWN'}
+    valid = {'PROFILE','SUMMARY','ACTION_RECOMMEND','PRODUCT_RECOMMEND','SERVICE_RECOVERY',
+             'PRODUCT_SEARCH','INTERACTION_SEARCH','DECISION_QUEUE','UNKNOWN'}
     intent = str(parsed.get('intent', 'UNKNOWN')).upper()
     if intent not in valid:
         intent = 'UNKNOWN'
@@ -652,32 +683,58 @@ def chat_classify(question):
     }
 
 
-def run_chat(question, persona):
+def _last_customer(history):
+    """Most recent customer the conversation was actually about."""
+    for turn in reversed(history or []):
+        if turn.get("customer_id"):
+            return turn["customer_id"]
+    return None
+
+
+def run_chat(question, persona, history=None):
     """
     The single entry point the chat UI calls. Classifies, resolves the
     customer deterministically, dispatches to the one tool that intent
     maps to, and composes a grounded answer. Returns everything the UI
     needs to show both the narrative and the raw data it came from.
+
+    `history` makes the chat a conversation rather than a series of
+    unrelated questions. It is used in exactly two places, both narrow:
+    the classifier sees the recent turns so it can resolve "him"/"them",
+    and if a customer-scoped intent still comes back without a customer,
+    we fall back to whoever the conversation was last about. Everything
+    downstream — the tool call, the data, the grounding — is unchanged.
     """
-    route = chat_classify(question)
+    route = chat_classify(question, history)
     intent = route['intent']
     cid = resolve_customer(route['customer_mention'])
-    result = {'intent': intent, 'customer_id': cid, 'tool': None, 'data': None, 'answer': None}
 
-    if intent in ('PROFILE', 'SUMMARY', 'ACTION_RECOMMEND', 'PRODUCT_RECOMMEND') and not cid:
+    # Deterministic carry-over: a follow-up that names nobody is about
+    # whoever we were just discussing. Done here rather than trusted to the
+    # model, so it holds even when the model misses the pronoun.
+    carried = False
+    if intent in ('PROFILE', 'SUMMARY', 'ACTION_RECOMMEND', 'PRODUCT_RECOMMEND', 'SERVICE_RECOVERY') and not cid:
+        prior = _last_customer(history)
+        if prior:
+            cid, carried = prior, True
+
+    result = {'intent': intent, 'customer_id': cid, 'tool': None, 'data': None,
+              'answer': None, 'carried_context': carried}
+
+    if intent in ('PROFILE', 'SUMMARY', 'ACTION_RECOMMEND', 'PRODUCT_RECOMMEND', 'SERVICE_RECOVERY') and not cid:
         if route['customer_mention']:
-            result['answer'] = (f"I couldn't match \"{route['customer_mention']}\" to anyone in "
-                                 "the book — try the customer ID (e.g. INS-1011) or full name.")
+            result['answer'] = (f"I couldn't find anyone matching \"{route['customer_mention']}\". "
+                                 "Try a customer ID like INS-1011, or the full name.")
         else:
-            result['answer'] = ("Which customer did you mean? Give me an ID (e.g. INS-1011) or "
-                                 "a full name.")
+            result['answer'] = ("Which customer is this about? Give me an ID like INS-1011, or "
+                                 "their full name.")
         return result
 
     if intent == 'PROFILE':
         result['tool'] = 'get_customer_360'
         df = chat_get_customer_360(cid)
         result['data'] = df.to_dict('records')
-        result['answer'] = chat_compose(question, intent, result['data'])
+        result['answer'] = chat_compose(question, intent, result['data'], history)
 
     elif intent == 'SUMMARY':
         result['tool'] = 'summarize_customer'
@@ -689,41 +746,49 @@ def run_chat(question, persona):
         result['tool'] = 'recommend_action'
         df = recommend(cid, persona, 0)
         result['data'] = df.to_dict('records')
-        result['answer'] = chat_compose(question, intent, result['data'])
+        result['answer'] = chat_compose(question, intent, result['data'], history)
 
     elif intent == 'PRODUCT_RECOMMEND':
         result['tool'] = 'recommend_product'
         df = recommend_product(cid)
         result['data'] = df.to_dict('records')
-        result['answer'] = chat_compose(question, intent, result['data'])
+        result['answer'] = chat_compose(question, intent, result['data'], history)
+
+    elif intent == 'SERVICE_RECOVERY':
+        result['tool'] = 'recommend_service'
+        df = recommend_service(cid)
+        result['data'] = df.to_dict('records')
+        result['answer'] = chat_compose(question, intent, result['data'], history)
 
     elif intent == 'PRODUCT_SEARCH':
         result['tool'] = 'search_products'
         res = search_products(route['search_query'] or question, limit=5)
         result['data'] = res
-        result['answer'] = chat_compose(question, intent, res)
+        result['answer'] = chat_compose(question, intent, res, history)
 
     elif intent == 'INTERACTION_SEARCH':
         result['tool'] = 'interaction_search'
         res = search_interactions(route['search_query'] or question, limit=5)
         result['data'] = res
-        result['answer'] = chat_compose(question, intent, res)
+        result['answer'] = chat_compose(question, intent, res, history)
 
     elif intent == 'DECISION_QUEUE':
         result['tool'] = 'get_decision_queue'
         df = queue('ALL')
         result['data'] = df.to_dict('records')
-        result['answer'] = chat_compose(question, intent, result['data'])
+        result['answer'] = chat_compose(question, intent, result['data'], history)
 
     else:
-        result['answer'] = ("I'm not sure which of profile, summary, a retention action, a product "
-                             "recommendation, or a search this is — try being more specific, e.g. "
-                             "\"summarize INS-1011\" or \"what product fits LND-2010 at renewal\".")
+        result['answer'] = (
+            "I can look up a customer's profile, summarise their history, recommend a retention "
+            "action or a product, search past calls and emails, or show who needs attention "
+            "today. Try something like \"summarise INS-1011\" or \"what product fits LND-2010 "
+            "at renewal?\"")
 
     return result
 
 
-def chat_compose(question, intent, facts):
+def chat_compose(question, intent, facts, history=None):
     """
     Turn a tool's structured output into a short natural-language answer,
     strictly grounded — the facts dict/list is the only source of truth
@@ -732,25 +797,50 @@ def chat_compose(question, intent, facts):
     prompt = (
         "Answer this relationship-manager question in 2-4 sentences, using ONLY the facts given. "
         "Never state a number, product, or action that is not present in the facts. If the facts "
-        "are empty, say plainly that nothing matched rather than guessing.\n\n"
+        "are empty, say plainly that nothing matched rather than guessing. Write for a busy "
+        "relationship manager: plain English, no jargon, no database or system names. The "
+        "conversation is shown only so your reply reads as a natural follow-up — every figure "
+        "you state must still come from the facts below.\n\n"
+        + _history_block(history, max_turns=4) +
         f"QUESTION: {question}\n\nINTENT: {intent}\n\nFACTS (JSON):\n{json.dumps(facts, default=str)[:4000]}"
     )
     for _attempt in range(2):
         answer = _scalar("SELECT AI_COMPLETE('llama3.3-70b', ?)", [prompt])
         if answer:
+            # The model sometimes returns the whole reply wrapped in quote marks;
+            # strip them so the chat bubble doesn't read like a quotation.
+            answer = str(answer).strip()
+            if len(answer) > 1 and answer[0] == '"' and answer[-1] == '"':
+                answer = answer[1:-1].strip()
             return answer
     return "Here's what matched, shown below — the summary didn't generate this time."
 
 
 # ── unified persona feed ─────────────────────────────────────────────────────
 @st.cache_data(ttl=300, show_spinner=False)
-def unified_feed(persona_scope, persona, assigned_user="rm1", team="team_alpha"):
+def unified_feed(persona_scope, persona, assigned_user="rm1", team="team_alpha", limit=12):
     """
     One ranked list per persona: retention actions for HIGH/CRITICAL customers,
     product opportunities for everyone else — never both for the same customer.
-    Loops every customer in scope through two scoring calls each, so this is
-    slow at full-book scope (a few minutes for all 30) — cached for 5 minutes
-    rather than re-run on every page visit.
+
+    Computed set-based in a single statement (~1s) rather than by looping every
+    customer through a scoring call (~47s). ELIGIBLE_TOTAL reports how many
+    customers qualified in total, so the UI can say plainly when the list is
+    showing the top slice rather than everything.
     """
-    return _df(f"""CALL {DB}.APP.UNIFIED_FEED(?, ?, ?, ?)""",
-               [persona_scope, assigned_user or "", team or "", persona])
+    return _df(f"""SELECT * FROM TABLE({DB}.APP.UNIFIED_FEED_FAST(?, ?, ?, ?, ?))""",
+               [persona_scope, assigned_user or "", team or "", persona, float(limit)])
+
+
+def recommend_service(cid):
+    """
+    Service recovery — what we owe a customer we failed. Served by the generic
+    decision engine from config rows alone; there is no service-specific
+    scoring function to call.
+    """
+    return _df(f"""SELECT * FROM TABLE({DB}.APP.RECOMMEND_GENERIC('service_recovery', ?))""", [cid])
+
+
+def refresh_signal_snapshot():
+    """Force the signal layer up to date — used after a scenario injects new evidence."""
+    return _scalar(f"CALL {DB}.APP.REFRESH_SIGNAL_SNAPSHOT()")

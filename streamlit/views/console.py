@@ -20,41 +20,59 @@ def _scope(persona):
 def feed(persona):
     row = _scope(persona)
     st.markdown("### My Feed")
-    st.caption("One ranked list, not two pages to check — retention actions for customers "
-               "in HIGH or CRITICAL risk, product opportunities for everyone else, never "
-               "both for the same customer. A customer about to leave never shows up with "
-               "an upsell: `APP.RECOMMEND_PRODUCT` checks churn state before suggesting one.")
+    st.caption("Your worklist for today, most urgent first — customers at risk of leaving, "
+               "then customers we owe something after a service failure, then genuine "
+               "opportunities. Nobody is ever offered a product while we still owe them a fix.")
 
-    if st.button("Refresh feed"):
+    if st.button("Refresh"):
+        # The signal layer is refreshed on demand rather than on a timer, so this
+        # button brings it up to date before re-ranking.
+        with st.spinner("Bringing signals up to date…"):
+            sf.refresh_signal_snapshot()
         sf.unified_feed.clear()
+        st.rerun()
 
-    with st.spinner("Scoring every customer in scope — retention and product engines both "
-                     "run per customer, this can take a few minutes at full-book scope…"):
+    with st.spinner("Ranking your customers…"):
         f = sf.unified_feed(row["DATA_SCOPE_TYPE"], persona, persona, "team_alpha")
 
     if not len(f):
-        st.info("Nothing in scope right now.")
+        st.info("Nothing needs your attention right now.")
         return
 
     retention = f[f.FEED_TYPE == "RETENTION"]
+    service = f[f.FEED_TYPE == "SERVICE"]
     opportunity = f[f.FEED_TYPE == "OPPORTUNITY"]
-    k = st.columns(3)
-    k[0].metric("Needs attention today", len(f))
-    k[1].metric("Retention", len(retention))
-    k[2].metric("Opportunity", len(opportunity))
+    k = st.columns(4)
+    k[0].metric("On your list", len(f))
+    k[1].metric("At risk", len(retention))
+    k[2].metric("We owe them", len(service),
+                help="Something went wrong on our side — a stuck claim, a repeat "
+                     "ticket, or poor satisfaction. Put right before anything is sold.")
+    k[3].metric("Opportunities", len(opportunity))
+
+    total = int(f["ELIGIBLE_TOTAL"].iloc[0]) if "ELIGIBLE_TOTAL" in f.columns else len(f)
+    if total > len(f):
+        st.caption(f"Showing the top {len(f)} of {total} customers who need something today — "
+                   "work down the list and refresh for the rest.")
 
     for _, r in f.iterrows():
         with st.container(border=True):
             head, badge = st.columns([4, 1])
             head.markdown(f"**{r['HEADLINE']}** — {r['FULL_NAME']} (`{r['CUSTOMER_ID']}`)")
-            color = "#B3251E" if r["FEED_TYPE"] == "RETENTION" else "#2E7D52"
-            badge.markdown(fmt.chip(r["FEED_TYPE"], color), unsafe_allow_html=True)
+            label, colour = {
+                "RETENTION":   ("At risk",     "#B3251E"),
+                "SERVICE":     ("We owe them", "#C98A00"),
+                "OPPORTUNITY": ("Opportunity", "#2E7D52"),
+            }.get(r["FEED_TYPE"], (r["FEED_TYPE"], "#5C6B70"))
+            badge.markdown(fmt.chip(label, colour), unsafe_allow_html=True)
             st.markdown(fmt.state_badge(r["STATE_NAME"], r["SEVERITY"]), unsafe_allow_html=True)
             m = st.columns(3)
             m[0].metric("Relationship", fmt.lakh(r["RELATIONSHIP_VALUE"]))
-            m[1].metric("Score", f"{r['SCORE']:.2f}")
-            m[2].caption(r["DETAIL"])
-            if st.button("Open in Customer 360", key=f"feed_{r['CUSTOMER_ID']}"):
+            m[1].metric("Fit score", f"{r['SCORE']:.2f}",
+                        help="How strongly this customer's situation matches this "
+                             "recommendation. Higher is a better fit.")
+            m[2].caption("Why: " + str(r["DETAIL"]).replace("_", " "))
+            if st.button("Open full profile", key=f"feed_{r['CUSTOMER_ID']}"):
                 st.session_state["cid"] = r["CUSTOMER_ID"]
                 st.session_state["page"] = "c360"
                 st.rerun()
@@ -72,11 +90,11 @@ def queue(persona):
 
     q = sf.queue(row["DATA_SCOPE_TYPE"], persona, "team_alpha")
     if not len(q):
-        st.info("Nothing in scope needs attention.")
+        st.info("Nothing in your scope needs attention.")
         if unowned and row["DATA_SCOPE_TYPE"] != "ALL":
-            st.warning(f"**{unowned} of {int(gap['TOTAL'])} customers have no owner** in "
-                       "CONFIG.CUSTOMER_ASSIGNMENT, so they appear in no RM or Team Lead "
-                       "queue at all. Switch to Team Lead for the whole book.")
+            st.info(f"{unowned} of {int(gap['TOTAL'])} customers aren't assigned to anyone yet, "
+                    "so they don't appear in any individual queue. Switch to VP Executive in "
+                    "the sidebar to see the whole book.")
         return
 
     k = st.columns(4)
@@ -84,6 +102,8 @@ def queue(persona):
     k[1].metric("High or worse", int((q.SEVERITY >= 3).sum()))
     k[2].metric("Relationship at risk", fmt.lakh(q.RELATIONSHIP_VALUE.sum()))
     k[3].metric("Critical", int((q.SEVERITY >= 4).sum()))
+    st.caption("Ordered by how severe the situation is, then by how much the relationship is "
+               "worth — so the biggest exposure surfaces first.")
 
     tf = sf.trust_flags().set_index("CUSTOMER_ID")
     view = q.copy()
@@ -100,28 +120,26 @@ def queue(persona):
 
     flagged = [c for c in view.CUSTOMER_ID if c in tf.index]
     if flagged:
-        st.caption("**Trust flags are not decoration — computed from APP.V_TRUST_FLAGS for "
-                   "every customer, not a hand-picked few.** They mark where the engine's "
-                   "answer is least reliable:")
-        for c in flagged:
-            st.caption(f"· `{c}` — {tf.loc[c, 'DETAIL']}")
+        with st.expander(f"⚠ {len(flagged)} customer(s) where the evidence is weaker than usual"):
+            st.caption("Treat these recommendations with more care — either the evidence "
+                       "disagrees with itself, or we've seen too few similar cases to be "
+                       "confident. Worth a human read before acting.")
+            for c in flagged:
+                st.caption(f"· `{c}` — {tf.loc[c, 'DETAIL']}")
 
     ins = q[q.DOMAIN == "insurance"]
     if len(ins) and ins.SEVERITY.max() >= 4:
         top_crit = ins[ins.SEVERITY >= 4].RELATIONSHIP_VALUE.max()
         top_any = q.RELATIONSHIP_VALUE.max()
         if pd.notna(top_crit) and pd.notna(top_any) and top_crit < top_any:
-            st.warning("**Risk does not track value here.** The most severe customers are not "
-                       "the most valuable ones. The rules are behaving correctly on the "
-                       "evidence available, but it means severity has to be read alongside "
-                       "relationship value, never on its own.")
+            st.info("Your most urgent customers aren't your most valuable ones right now — "
+                    "worth reading severity and relationship value together when you decide "
+                    "what to work first.")
 
     if unowned and row["DATA_SCOPE_TYPE"] != "ALL":
-        st.warning(f"**{unowned} of {int(gap['TOTAL'])} customers have no owner** in "
-                   f"CONFIG.CUSTOMER_ASSIGNMENT, so this queue can only ever show the "
-                   f"{int(gap['OWNED'])} that do. Scoping works correctly — the assignment "
-                   "table was simply never backfilled past the original demo set. VP "
-                   "Executive sees everything.")
+        st.caption(f"{unowned} of {int(gap['TOTAL'])} customers aren't assigned to anyone yet, so "
+                   f"this queue shows the {int(gap['OWNED'])} that are. VP Executive sees the "
+                   "whole book.")
 
     pick = st.selectbox("Open a customer", ["—"] + list(q.CUSTOMER_ID))
     if pick != "—":
@@ -141,10 +159,10 @@ def approvals(persona):
 
     pending = sf.pending_approvals(row["DATA_SCOPE_TYPE"], persona, persona, "team_alpha")
     if not len(pending):
-        st.success("Nothing is waiting for approval in your scope.")
+        st.success("Nothing is waiting for your approval.")
         return
-    st.caption("Computed server-side by APP.PENDING_APPROVALS — one Snowpark call scores "
-               "every customer in scope and keeps the top candidate that needs sign-off.")
+    st.caption("Recommended actions that cost more than a relationship manager can authorise "
+               "on their own, so they need your sign-off before they can go ahead.")
 
     for _, p in pending.iterrows():
         with st.container(border=True):
@@ -160,12 +178,9 @@ def approvals(persona):
             m[2].metric("Needs authority", fmt.inr(auth.get("needed")))
             m[3].metric("Your ceiling", fmt.inr(auth.get("persona_limit")))
             if not auth.get("authorised"):
-                st.error("Above your authority — escalate to Team Lead.")
-            if not auth.get("authorised_under_config"):
-                st.caption("⚠ Under the raw CONFIG ceiling this is unapprovable by every "
-                           "persona including the VP. Using the corrected rupee limits.")
-            st.caption("Approving from here is deliberately not wired — approval belongs to a "
-                       "scenario run so it is reversible. Use Scenario Studio.")
+                st.error("This is above your approval limit — escalate to a VP Executive.")
+            st.caption("To approve and carry this out end to end, open it in Scenario Studio — "
+                       "actions taken there are fully reversible.")
 
 
 def customer_360(persona):
@@ -219,9 +234,9 @@ def customer_360(persona):
                     "Regulatory", "Recommendation"])
 
     with tabs[0]:
-        st.caption("Every signal behind the current state, and what each one contributes. "
-                   "Eight of the nine new signals are plain SQL over observable facts — "
-                   "a filing exists, a renewal was late, a ticket breached SLA.")
+        st.caption("Everything that put this customer in their current state, and how much "
+                   "each one counted. Most are observable facts — a filing exists, a renewal "
+                   "was late, a ticket missed its deadline.")
         why = sf.why_this_state(cid)
         if len(why):
             st.dataframe(why, hide_index=True, use_container_width=True,
@@ -230,8 +245,8 @@ def customer_360(persona):
                                         "CONTRIBUTION": "What it contributes"})
             der = int((why.ORIGIN == "DERIVED").sum())
             ext = int((why.ORIGIN == "EXTRACTED").sum())
-            st.caption(f"{der} derived deterministically from source systems · "
-                       f"{ext} extracted from unstructured text by Cortex.")
+            st.caption(f"{der} read from source systems · {ext} picked out of what the "
+                       f"customer said on calls and in emails.")
         else:
             st.info("No signals on file.")
 
@@ -308,11 +323,13 @@ def customer_360(persona):
             st.dataframe(recs[["RANKING", "ACTION_NAME", "POLICY_STATUS", "SCORE",
                                "EFFECTIVENESS_RATE", "SAMPLE_SIZE", "EXPECTED_VALUE"]],
                          hide_index=True, use_container_width=True)
-            st.caption(f"Computed live for **{persona.replace('_', ' ')}**. Change role in "
-                       "the sidebar and the order can change.")
+            st.caption(f"Ranked for **{persona.replace('_', ' ')}**. Different roles weigh "
+                       "cost and value differently, so switching role in the sidebar can "
+                       "reorder this.")
         else:
-            st.info("No action is mapped to this state — the engine recommends nothing "
-                    "rather than inventing an intervention.")
+            st.info("Nothing is recommended for this customer right now. Their situation "
+                    "doesn't match any approved action, and we'd rather say nothing than "
+                    "invent an intervention.")
 
 
 def portfolio(persona):
@@ -344,8 +361,8 @@ def portfolio(persona):
             ).properties(height=28 * max(len(pv), 1) + 20)
         )
         st.altair_chart(chart, use_container_width=True)
-    st.caption("Bars are coloured by severity and every row is labelled, so colour never "
-               "carries the meaning on its own.")
+    st.caption("How much relationship value sits in each state — the tall bars in the worst "
+               "states are where the money is at risk.")
 
     st.markdown("##### What actually works")
     ev = sf.effectiveness().copy()
@@ -364,34 +381,35 @@ def portfolio(persona):
             "CONFIDENCE": st.column_config.NumberColumn("Conf", format="%.2f"),
             "IS_THIN_SAMPLE": st.column_config.CheckboxColumn("thin sample?"),
         })
-    st.caption("Thin-sample is a real column on APP.V_ACTION_EFFECTIVENESS (confidence < "
-               "0.70), not a threshold re-typed in the UI. The recommender discounts these "
-               "rather than treating 14 cases like 112.")
+    st.caption("Every action's real track record, learned from recorded outcomes. Anything "
+               "flagged thin sample hasn't been tried often enough to trust yet — the engine "
+               "already discounts those rather than treating 14 cases like 112.")
 
     if len(act):
         st.markdown("##### Recent activity")
         st.dataframe(act, hide_index=True, use_container_width=True)
     else:
-        st.info("No actions have been carried out yet. Run a scenario in the Studio and "
-                "this fills up — ACTION_RECOMMENDATION, ACTION_EXECUTION, ACTION_OUTCOME, "
-                "NOTIFICATION_LOG and INTERACTION_SUMMARY all populate from a real run.")
+        st.info("No actions have been carried out yet. Run a scenario in Scenario Studio and "
+                "what happened, and what it led to, will show up here.")
 
 
 TOOL_LABEL = {
-    'get_customer_360': 'get_customer_360 — profile lookup',
-    'summarize_customer': 'summarize_customer — AI_SUMMARIZE over conversation history',
-    'recommend_action': 'recommend_action — deterministic retention engine',
-    'recommend_product': 'recommend_product — deterministic personalization engine',
-    'search_products': 'search_products — Cortex Search over product literature',
-    'interaction_search': 'interaction_search — Cortex Search over calls/tickets/emails',
-    'get_decision_queue': 'get_decision_queue — portfolio queue',
+    'get_customer_360': 'Looked up their profile',
+    'summarize_customer': 'Summarised their history from past calls and emails',
+    'recommend_action': 'Ran the retention engine',
+    'recommend_product': 'Ran the product recommendation engine',
+    'recommend_service': 'Ran the service recovery engine',
+    'search_products': 'Searched product documentation',
+    'interaction_search': 'Searched past calls, tickets and emails',
+    'get_decision_queue': 'Checked who needs attention',
 }
 
 CHAT_EXAMPLES = [
-    "Show me the customer 360 profile for INS-1011",
-    "Summarize customer INS-1005 for me",
-    "What's the recommended action for INS-1005?",
+    "Show me the profile for INS-1011",
+    "Summarise customer INS-1005 for me",
+    "What should we do about INS-1005?",
     "What product should we offer Arun Mehta at renewal?",
+    "We let INS-1001 down — what should we do to make it right?",
     "What does the Super Top-up Health Cover include?",
     "Find calls about customers threatening to switch insurers",
 ]
@@ -399,12 +417,10 @@ CHAT_EXAMPLES = [
 
 def ask(persona):
     st.markdown("### Ask the data")
-    st.caption("Routes every question to the narrowest tool that answers it — a plain profile "
-               "lookup, a conversation summary, a retention action, or a product recommendation "
-               "are four different, independent tools, never blended into one. The same routing "
-               "logic is registered on `APP.CUSTOMER_360_AGENT` for use in Snowsight directly; "
-               "this page runs it natively since Streamlit-in-Snowflake can't reach the Agent's "
-               "REST endpoint without a separate external access integration.")
+    st.caption("Ask in your own words. Every question goes to the one capability that answers "
+               "it — a profile, a summary of their history, a retention action, a product fit, "
+               "or a search across past conversations — and the answer only ever uses what came "
+               "back. You can keep talking: follow-ups remember who you were asking about.")
 
     with st.expander("Try one of these"):
         for ex in CHAT_EXAMPLES:
@@ -418,10 +434,14 @@ def ask(persona):
         with st.chat_message(turn["role"]):
             st.markdown(turn["content"])
             if turn.get("tool"):
-                st.caption(f"🔧 {TOOL_LABEL.get(turn['tool'], turn['tool'])}"
-                           + (f" · customer `{turn['customer_id']}`" if turn.get("customer_id") else ""))
+                line = TOOL_LABEL.get(turn["tool"], turn["tool"])
+                if turn.get("customer_id"):
+                    line += f" · `{turn['customer_id']}`"
+                if turn.get("carried_context"):
+                    line += " · carried over from your last question"
+                st.caption(line)
             if turn.get("data") is not None:
-                with st.expander("See the underlying data"):
+                with st.expander("See the data behind this"):
                     if isinstance(turn["data"], list) and turn["data"]:
                         st.dataframe(turn["data"], hide_index=True, use_container_width=True)
                     else:
@@ -431,16 +451,21 @@ def ask(persona):
     typed = st.chat_input("Ask about a customer, a product, or who needs attention…")
     q = pending or typed
     if q:
+        # Pass the conversation so far so follow-ups ("what about his renewal?")
+        # resolve against whoever we were already discussing. The history is read
+        # before this turn is appended, so the model never sees the live question twice.
+        history = list(st.session_state["chat_history"])
         st.session_state["chat_history"].append({"role": "user", "content": q})
-        with st.spinner("Routing…"):
-            result = sf.run_chat(q, persona)
+        with st.spinner("Working on it…"):
+            result = sf.run_chat(q, persona, history)
         st.session_state["chat_history"].append({
             "role": "assistant", "content": result["answer"], "tool": result["tool"],
             "customer_id": result["customer_id"], "data": result["data"],
+            "carried_context": result.get("carried_context", False),
         })
         st.rerun()
 
-    if st.session_state["chat_history"] and st.button("Clear conversation"):
+    if st.session_state["chat_history"] and st.button("Start a new conversation"):
         st.session_state["chat_history"] = []
         st.rerun()
 
@@ -452,41 +477,37 @@ def config(persona):
         st.info(f"{row['PERSONA_NAME']} has read-only access to configuration. "
                 "Switch to Analyst in the sidebar.")
 
-    st.markdown("##### Scoring weights")
+    st.markdown("##### How recommendations are weighted")
     st.dataframe(sf.scoring_weights(), hide_index=True, use_container_width=True)
-    st.caption("These are read live by APP.RECOMMEND_ACTION. Personas without a row fall "
-               "back to `default`, so every persona always gets a ranked recommendation.")
+    st.caption("Each role weighs a recommendation differently — a relationship manager leans on "
+               "how well an action works, an executive leans on what the relationship is worth "
+               "and what the action costs. Change these and the ranking changes immediately, "
+               "with no release needed. Roles without their own row use the default.")
 
-    st.markdown("##### Approval ceilings")
+    st.markdown("##### Approval limits")
     p = sf.personas()
-    pv = p.copy()
-    pv["needs fixing"] = pv.CONFIG_LIMIT != pv.EFFECTIVE_LIMIT
-    st.dataframe(pv[["PERSONA_NAME", "DATA_SCOPE_TYPE", "CONFIG_LIMIT", "EFFECTIVE_LIMIT",
-                     "needs fixing", "NOTE"]],
-                 hide_index=True, use_container_width=True)
-    st.error("**CONFIG.USER_PERSONA still holds the unconverted value.** Policy gates are in "
-             "rupees (₹4,15,000+) while Team Lead's ceiling is 100,000, so even the one "
-             "approval tier can't approve anything. The app reads a corrected override "
-             "table (APP.PERSONA_LIMIT) so approvals work today; the real fix is still this "
-             "UPDATE statement against CONFIG directly:")
-    st.code("UPDATE CONFIG.USER_PERSONA SET max_approval_value = 8300000 "
-            "WHERE persona_id='team_lead';", language="sql")
+    st.dataframe(p[["PERSONA_NAME", "DATA_SCOPE_TYPE", "EFFECTIVE_LIMIT"]],
+                 hide_index=True, use_container_width=True,
+                 column_config={"PERSONA_NAME": "Role", "DATA_SCOPE_TYPE": "Sees",
+                                "EFFECTIVE_LIMIT": st.column_config.NumberColumn(
+                                    "Can approve up to", format="₹%d")})
+    st.caption("Anything above a role's limit is held for the next tier instead of going ahead.")
 
-    st.markdown("##### State rules")
-    dom = st.selectbox("Domain", ["insurance", "lending"])
+    st.markdown("##### When a customer counts as at-risk")
+    dom = st.selectbox("Business line", ["insurance", "lending"])
     st.dataframe(sf.state_rules(dom), hide_index=True, use_container_width=True)
-    st.warning("Priority and the active flag **are** honoured — switching a rule off or "
-               "reordering the ladder genuinely works. The predicates are still hardcoded in "
-               "COMPUTE_STATES keyed on domain and priority, so editing a threshold here has "
-               "no effect, and a third domain would produce no state at all. That is the "
-               "remaining gap between the extensibility claim and the implementation.")
+    st.caption("The ladder is evaluated top down and the first rule that matches decides the "
+               "customer's state. Switching a rule off or reordering it takes effect on the "
+               "next run.")
 
-    st.markdown("##### Signals")
+    st.markdown("##### What we watch for")
     defs = sf.signal_definitions(dom)
-    st.dataframe(defs[["SIGNAL_NAME", "EXTRACTION_METHOD", "WEIGHT", "SOURCE_TABLE"]],
-                 hide_index=True, use_container_width=True)
-    st.caption("All configured signals for this domain produce rows — extracted via Cortex "
-               "or derived deterministically from source systems.")
+    st.dataframe(defs[["SIGNAL_NAME", "EXTRACTION_METHOD", "WEIGHT"]],
+                 hide_index=True, use_container_width=True,
+                 column_config={"SIGNAL_NAME": "Signal", "EXTRACTION_METHOD": "Found by",
+                                "WEIGHT": "Weight"})
+    st.caption("Some signals are read straight from the source systems; others are picked out "
+               "of what customers actually said on calls and in emails.")
 
 
 CATEGORY_COLOR = {"RISK": "#B3251E", "SERVICE": "#C98A00", "OPPORTUNITY": "#2E7D52"}
@@ -501,9 +522,9 @@ PRIORITY_COLOR = {"HIGH": "#B3251E", "MEDIUM": "#C98A00", "LOW": "#5C6B70"}
 def signal_discovery(persona):
     row = _scope(persona)
     st.markdown("### Signal discovery")
-    st.caption("Runs once a day against RAW tables nothing has mined yet, and proposes "
-               "candidates — structured columns scored deterministically, free text via "
-               "Cortex. Nothing here activates on its own; every candidate waits for a human.")
+    st.caption("Once a day the platform looks through data nothing is using yet and proposes "
+               "new things worth watching. Nothing is switched on automatically — every "
+               "suggestion waits for someone to approve it.")
 
     last = sf.discovery_latest_run()
     c1, c2 = st.columns([1, 3])
@@ -558,8 +579,8 @@ def signal_discovery(persona):
                                 st.rerun()
 
         if len(lo):
-            with st.expander(f"{len(lo)} low-priority candidate(s) — mostly static or "
-                              "rarely-informative columns, collapsed so the real work stays visible"):
+            with st.expander(f"{len(lo)} lower-priority suggestion(s) — mostly fields that "
+                              "rarely change or rarely tell us anything"):
                 st.dataframe(lo[["SIGNAL_NAME", "CATEGORY", "SOURCE_TABLE", "SOURCE_COLUMN", "RATIONALE"]],
                              hide_index=True, use_container_width=True,
                              column_config={"SIGNAL_NAME": "Signal", "CATEGORY": "Type",
@@ -567,7 +588,7 @@ def signal_discovery(persona):
                                             "RATIONALE": "Why"})
 
     st.divider()
-    st.markdown("##### Signals already live, same three types")
+    st.markdown("##### Already in use")
     live = sf.signals_by_category()
     for cat in ["RISK", "SERVICE", "OPPORTUNITY"]:
         sub = live[live.CATEGORY == cat]
