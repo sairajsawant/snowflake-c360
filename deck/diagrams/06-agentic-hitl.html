@@ -1,0 +1,74 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"><title>Proactive, human in the loop</title></head>
+<body>
+<svg width="1380" height="630" viewBox="0 0 1380 630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#141413"/></marker>
+    <marker id="ahm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5E5D59"/></marker>
+    <marker id="ahc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#D97757"/></marker>
+  </defs>
+
+  <!-- lanes -->
+  <rect x="40" y="30"  width="1300" height="138" rx="12" fill="#F0EEE6"/>
+  <rect x="40" y="178" width="1300" height="138" rx="12" fill="#FFFFFF" stroke="#E3E0D8"/>
+  <rect x="40" y="326" width="1300" height="138" rx="12" fill="#F0EEE6"/>
+  <rect x="40" y="474" width="1300" height="138" rx="12" fill="#FFFFFF" stroke="#E3E0D8"/>
+
+  <text class="lbl" x="62" y="92"  style="font-weight:600">Platform</text>
+  <text class="sm"  x="62" y="118">always on, scheduled</text>
+  <text class="lbl" x="62" y="240" style="font-weight:600">Relationship</text>
+  <text class="lbl" x="62" y="266" style="font-weight:600">Manager</text>
+  <text class="sm"  x="62" y="292">own book</text>
+  <text class="lbl" x="62" y="388" style="font-weight:600">Team Lead</text>
+  <text class="sm"  x="62" y="414">team, approves</text>
+  <text class="lbl" x="62" y="536" style="font-weight:600">Analyst</text>
+  <text class="sm"  x="62" y="562">whole book, config</text>
+
+  <!-- platform -->
+  <rect class="t-heather" x="270" y="58" width="200" height="82" rx="10"/>
+  <text class="lbl" x="288" y="94">Pipeline runs</text><text class="sm" x="288" y="120">on a schedule</text>
+  <rect class="t-olive" x="500" y="58" width="200" height="82" rx="10"/>
+  <text class="lbl" x="518" y="94">Spots a change</text><text class="sm" x="518" y="120">in risk or need</text>
+  <rect class="t-clay" x="730" y="58" width="200" height="82" rx="10"/>
+  <text class="lbl" x="748" y="94">Ranks the next</text><text class="sm" x="748" y="120">best action</text>
+  <rect class="t-kraft" x="1120" y="58" width="200" height="82" rx="10"/>
+  <text class="lbl" x="1138" y="94">Learns from</text><text class="sm" x="1138" y="120">the outcome</text>
+  <path class="arrow" d="M472,99 L494,99"/>
+  <path class="arrow" d="M702,99 L724,99"/>
+
+  <!-- RM -->
+  <rect class="box" x="730" y="206" width="200" height="82" rx="10"/>
+  <text class="lbl" x="748" y="242">Sees it in</text><text class="sm" x="748" y="268">My Feed</text>
+  <rect class="box" x="925" y="206" width="0" height="0"/>
+  <rect class="box" x="960" y="206" width="140" height="82" rx="10"/>
+  <text class="lbl" x="976" y="242">Reviews</text><text class="sm" x="976" y="268">evidence, brief</text>
+  <rect class="box" x="1120" y="206" width="200" height="82" rx="10"/>
+  <text class="lbl" x="1138" y="242">Takes action</text><text class="sm" x="1138" y="268">customer notified</text>
+  <path class="arrow" d="M830,142 L830,200"/>
+  <path class="arrow" d="M932,247 L954,247"/>
+  <path class="arrow" d="M1102,247 L1114,247"/>
+  <path class="arrow-c" d="M1220,204 L1220,146"/>
+
+  <!-- Team lead -->
+  <rect class="t-sky" x="960" y="354" width="140" height="82" rx="10"/>
+  <text class="lbl" x="976" y="390">Over the</text><text class="sm" x="976" y="416">RM's limit</text>
+  <rect class="t-sky" x="1120" y="354" width="200" height="82" rx="10"/>
+  <text class="lbl" x="1138" y="390">Approves or</text><text class="sm" x="1138" y="416">modifies the offer</text>
+  <path class="arrow" d="M1030,292 L1030,348"/>
+  <path class="arrow" d="M1102,395 L1114,395"/>
+  <path class="arrow" d="M1220,350 L1220,294"/>
+
+  <!-- Analyst -->
+  <rect class="box" x="270" y="502" width="200" height="82" rx="10"/>
+  <text class="lbl" x="288" y="538">Approves new</text><text class="sm" x="288" y="564">discovered signals</text>
+  <rect class="box" x="500" y="502" width="200" height="82" rx="10"/>
+  <text class="lbl" x="518" y="538">Tunes weights</text><text class="sm" x="518" y="564">and rules</text>
+  <path class="arrow" d="M472,543 L494,543"/>
+  <path class="arrow-d" d="M600,498 L600,330 L400,330 L400,148"/>
+  <text class="sm" x="614" y="410" style="font-size:16px">live on the next run,</text>
+  <text class="sm" x="614" y="432" style="font-size:16px">no release</text>
+
+  <text class="sm" x="760" y="540" style="font-size:18px">Same flow for churn, personalization</text>
+  <text class="sm" x="760" y="566" style="font-size:18px">and service recovery</text>
+</svg>
+</body></html>

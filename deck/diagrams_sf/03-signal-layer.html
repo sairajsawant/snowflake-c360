@@ -1,0 +1,86 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"><title>Layer 2 · Understand</title></head>
+<body>
+<svg width="1380" height="630" viewBox="0 0 1380 630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#252525"/></marker>
+    <marker id="ahm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5B5B5B"/></marker>
+  </defs>
+
+  <text class="cap" x="40"   y="56">Input</text>
+  <text class="cap" x="320"  y="56">Extract</text>
+  <text class="cap" x="720"  y="56">Signal</text>
+  <text class="cap" x="1080" y="56">Category</text>
+
+  <!-- inputs -->
+  <rect class="t-sky" x="40" y="100" width="230" height="130" rx="12"/>
+  <text class="lbl" x="60" y="140" style="font-weight:600">Structured data</text>
+  <text class="sm" x="60" y="172">payments, claims,</text>
+  <text class="sm" x="60" y="196">tickets, policies</text>
+
+  <rect class="t-sky" x="40" y="270" width="230" height="130" rx="12"/>
+  <text class="lbl" x="60" y="310" style="font-weight:600">Conversations</text>
+  <text class="sm" x="60" y="342">calls and emails</text>
+
+  <text class="h1" x="40" y="500" style="font-size:54px">25</text>
+  <text class="sm" x="40" y="532">signals live, 184 readings,</text>
+  <text class="sm" x="40" y="556">each with its evidence</text>
+
+  <!-- extraction -->
+  <rect class="box" x="320" y="100" width="350" height="96" rx="10"/>
+  <text class="lbl" x="340" y="138" style="font-weight:600">Business rules</text>
+  <text class="sm" x="340" y="168">renewal due, late payment, SLA breach</text>
+
+  <rect class="box" x="320" y="216" width="350" height="96" rx="10"/>
+  <text class="lbl" x="340" y="254" style="font-weight:600">AI_COMPLETE</text>
+  <text class="sm" x="340" y="284">intent, picked from a fixed list</text>
+
+  <rect class="box" x="320" y="332" width="350" height="96" rx="10"/>
+  <text class="lbl" x="340" y="370" style="font-weight:600">AI_SENTIMENT</text>
+  <text class="sm" x="340" y="400">tone of every conversation</text>
+
+  <path class="arrow" d="M274,160 L314,150"/>
+  <path class="arrow" d="M274,320 L314,268"/>
+  <path class="arrow" d="M274,350 L314,378"/>
+
+  <path class="arrow" d="M674,148 L714,210"/>
+  <path class="arrow" d="M674,264 L714,264"/>
+  <path class="arrow" d="M674,380 L714,318"/>
+
+  <!-- signal record -->
+  <rect class="panel" x="720" y="100" width="310" height="328" rx="12" style="stroke:#252525"/>
+  <text class="cap" x="742" y="132">Example signal</text>
+  <text class="sm"  x="742" y="172">Signal</text><text class="lbl" x="860" y="172">Churn intent</text>
+  <text class="sm"  x="742" y="212">Value</text><text class="lbl" x="860" y="212" style="fill:#11567F;font-weight:600">HIGH</text>
+  <text class="sm"  x="742" y="252">Source</text><text class="lbl" x="860" y="252">Call transcript</text>
+  <text class="sm"  x="742" y="292">Evidence</text>
+  <text class="serif" x="742" y="324" style="font-size:19px;font-style:italic">“…if this is not resolved</text>
+  <text class="serif" x="742" y="350" style="font-size:19px;font-style:italic">before my renewal date,</text>
+  <text class="serif" x="742" y="376" style="font-size:19px;font-style:italic">I will switch to</text>
+  <text class="serif" x="742" y="402" style="font-size:19px;font-style:italic">HDFC Ergo.”</text>
+
+  <path class="arrow" d="M1034,264 L1074,264"/>
+
+  <!-- categories -->
+  <rect class="t-clay"  x="1080" y="100" width="260" height="96" rx="10"/>
+  <text class="lbl" x="1100" y="138" style="font-weight:600">Risk</text>
+  <text class="sm" x="1100" y="168">will they leave or default</text>
+  <rect class="t-kraft" x="1080" y="216" width="260" height="96" rx="10"/>
+  <text class="lbl" x="1100" y="254" style="font-weight:600">Service</text>
+  <text class="sm" x="1100" y="284">what we got wrong</text>
+  <rect class="t-olive" x="1080" y="332" width="260" height="96" rx="10"/>
+  <text class="lbl" x="1100" y="370" style="font-weight:600">Opportunity</text>
+  <text class="sm" x="1100" y="400">what fits them next</text>
+
+  <!-- discovery -->
+  <rect class="panel" x="320" y="468" width="1020" height="132" rx="12"/>
+  <text class="cap" x="342" y="498">Signal discovery · runs daily</text>
+  <rect class="t-heather" x="342" y="520" width="226" height="56" rx="28"/><text class="lbl mid" x="455" y="555">Scan unused data</text>
+  <rect class="t-heather" x="598" y="520" width="226" height="56" rx="28"/><text class="lbl mid" x="711" y="555">Propose signals</text>
+  <rect class="t-heather" x="854" y="520" width="226" height="56" rx="28"/><text class="lbl mid" x="967" y="555">Analyst approves</text>
+  <rect class="t-olive"   x="1110" y="520" width="210" height="56" rx="28"/><text class="lbl mid" x="1215" y="555">Live everywhere</text>
+  <path class="arrow" d="M570,548 L594,548"/>
+  <path class="arrow" d="M826,548 L850,548"/>
+  <path class="arrow" d="M1082,548 L1106,548"/>
+</svg>
+</body></html>

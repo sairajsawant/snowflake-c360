@@ -1,0 +1,73 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"><title>Layer 1 · Unify</title></head>
+<body>
+<svg width="1380" height="630" viewBox="0 0 1380 630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#252525"/></marker>
+    <marker id="ahm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5B5B5B"/></marker>
+  </defs>
+
+  <text class="cap" x="40"  y="56">Sources · records</text>
+  <text class="cap" x="440" y="56">Unify</text>
+  <text class="cap" x="870" y="56">Serve</text>
+
+  <!-- source groups -->
+  <rect class="panel" x="40" y="78" width="330" height="150" rx="12"/>
+  <text class="cap" x="60" y="106">Conversations</text>
+  <text class="lbl" x="60" y="142">Call transcripts</text><text class="lbl end" x="350" y="142" style="fill:#5B5B5B">34</text>
+  <text class="lbl" x="60" y="174">Emails</text><text class="lbl end" x="350" y="174" style="fill:#5B5B5B">162</text>
+  <text class="lbl" x="60" y="206">Support tickets</text><text class="lbl end" x="350" y="206" style="fill:#5B5B5B">151</text>
+
+  <rect class="panel" x="40" y="244" width="330" height="182" rx="12"/>
+  <text class="cap" x="60" y="272">Transactions</text>
+  <text class="lbl" x="60" y="308">Policies &amp; versions</text><text class="lbl end" x="350" y="308" style="fill:#5B5B5B">279</text>
+  <text class="lbl" x="60" y="340">Payments</text><text class="lbl end" x="350" y="340" style="fill:#5B5B5B">81</text>
+  <text class="lbl" x="60" y="372">Claims</text><text class="lbl end" x="350" y="372" style="fill:#5B5B5B">15</text>
+  <text class="lbl" x="60" y="404">Loans</text><text class="lbl end" x="350" y="404" style="fill:#5B5B5B">15</text>
+
+  <rect class="panel" x="40" y="442" width="330" height="118" rx="12"/>
+  <text class="cap" x="60" y="470">Reference</text>
+  <text class="lbl" x="60" y="506">Product documents</text><text class="lbl end" x="350" y="506" style="fill:#5B5B5B">11</text>
+  <text class="lbl" x="60" y="538">Regulatory filings</text><text class="lbl end" x="350" y="538" style="fill:#5B5B5B">8</text>
+
+  <path class="arrow" d="M374,153 L434,153"/>
+  <path class="arrow" d="M374,335 L434,335"/>
+  <path class="arrow" d="M374,501 L434,501"/>
+
+  <!-- canonical model -->
+  <rect class="t-sky" x="440" y="78" width="370" height="482" rx="14"/>
+  <text class="h2" x="465" y="120">Canonical model</text>
+  <text class="sm" x="465" y="148">Dynamic Tables keep it current</text>
+  <rect class="box" x="465" y="176" width="320" height="54" rx="8"/><text class="lbl" x="485" y="210">Customer</text>
+  <rect class="box" x="465" y="244" width="320" height="54" rx="8"/><text class="lbl" x="485" y="278">Account</text>
+  <rect class="box" x="465" y="312" width="320" height="54" rx="8"/><text class="lbl" x="485" y="346">Product</text>
+  <rect class="box" x="465" y="380" width="320" height="54" rx="8"/><text class="lbl" x="485" y="414">Interaction</text>
+  <rect class="box" x="465" y="448" width="320" height="54" rx="8"/><text class="lbl" x="485" y="482">Event</text>
+
+  <!-- serve -->
+  <path class="arrow" d="M814,210 L864,210"/>
+  <rect class="t-kraft" x="870" y="78" width="470" height="262" rx="14"/>
+  <text class="h2" x="895" y="120">Customer 360 profile</text>
+  <text class="lbl" x="895" y="166">Relationship value, tenure, segment</text>
+  <text class="lbl" x="895" y="202">Open tickets, SLA breaches, CSAT</text>
+  <text class="lbl" x="895" y="238">Claims, grievances, portability</text>
+  <text class="lbl" x="895" y="274">Every call and email, in context</text>
+  <text class="lbl" x="895" y="310">One dated timeline</text>
+
+  <path class="arrow" d="M814,383 L864,383"/>
+  <rect class="panel" x="870" y="352" width="470" height="62" rx="10" style="stroke:#29B5E8;stroke-width:2"/>
+  <text class="cap" x="895" y="376" style="fill:#11567F">Semantic View</text>
+  <text class="lbl" x="895" y="402" style="font-size:18px">Governed definitions for analytics and the agent</text>
+
+  <path class="arrow" d="M814,452 L864,452"/>
+  <rect class="panel" x="870" y="424" width="470" height="56" rx="10"/>
+  <text class="cap" x="895" y="446">Change streams</text>
+  <text class="lbl" x="895" y="470" style="font-size:18px">New conversations trigger signal extraction</text>
+
+  <rect class="ghost" x="870" y="492" width="470" height="50" rx="25"/>
+  <text class="lbl" x="895" y="524">+ New source: map it once to the model</text>
+  <path class="arrow-d" d="M866,517 L816,517"/>
+  <text class="sm" x="870" y="576" style="fill:#11567F">Signals, decisions and apps keep running untouched</text>
+  <text class="sm" x="40" y="600" style="font-size:16px;font-style:italic">Small, high-quality Indian dataset in English and Hinglish, generated with CoCo CLI from Kaggle and IRDAI samples</text>
+</svg>
+</body></html>

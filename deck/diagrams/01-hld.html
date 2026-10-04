@@ -1,0 +1,89 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"><title>High-level architecture</title></head>
+<body>
+<svg width="1380" height="630" viewBox="0 0 1380 630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#141413"/></marker>
+    <marker id="ahc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#D97757"/></marker>
+  </defs>
+
+  <!-- column captions -->
+  <text class="cap" x="40"   y="56">Sources</text>
+  <text class="cap" x="290"  y="56">1 · Unify</text>
+  <text class="cap" x="565"  y="56">2 · Understand</text>
+  <text class="cap" x="850"  y="56">3 · Decide</text>
+  <text class="cap" x="1135" y="56">4 · Act</text>
+
+  <!-- sources -->
+  <g>
+    <rect class="box" x="40" y="78"  width="200" height="42" rx="21"/><text class="lbl mid" x="140" y="106">Call transcripts</text>
+    <rect class="box" x="40" y="127" width="200" height="42" rx="21"/><text class="lbl mid" x="140" y="155">Emails</text>
+    <rect class="box" x="40" y="176" width="200" height="42" rx="21"/><text class="lbl mid" x="140" y="204">Support tickets</text>
+    <rect class="box" x="40" y="225" width="200" height="42" rx="21"/><text class="lbl mid" x="140" y="253">Product docs</text>
+    <rect class="box" x="40" y="274" width="200" height="42" rx="21"/><text class="lbl mid" x="140" y="302">Payments</text>
+    <rect class="box" x="40" y="323" width="200" height="42" rx="21"/><text class="lbl mid" x="140" y="351">Policies &amp; claims</text>
+    <rect class="box" x="40" y="372" width="200" height="42" rx="21"/><text class="lbl mid" x="140" y="400">Loans</text>
+    <rect class="box" x="40" y="421" width="200" height="42" rx="21"/><text class="lbl mid" x="140" y="449">Regulatory filings</text>
+  </g>
+
+  <!-- 1 Unify -->
+  <rect class="t-sky" x="290" y="78" width="225" height="392" rx="14"/>
+  <text class="h2" x="310" y="120">Customer 360</text>
+  <rect class="box" x="310" y="146" width="185" height="42" rx="8"/><text class="lbl" x="326" y="174">Dynamic Tables</text>
+  <rect class="box" x="310" y="198" width="185" height="42" rx="8"/><text class="lbl" x="326" y="226">Change streams</text>
+  <rect class="box" x="310" y="250" width="185" height="42" rx="8"/><text class="lbl" x="326" y="278">Canonical model</text>
+  <rect class="box" x="310" y="302" width="185" height="42" rx="8" style="stroke:#D97757;stroke-width:2"/><text class="lbl" x="326" y="330" style="font-weight:600">Semantic View</text>
+  <rect class="box" x="310" y="354" width="185" height="42" rx="8"/><text class="lbl" x="326" y="382">Unified profile</text>
+  <text class="sm" x="310" y="424">governed definitions,</text>
+  <text class="sm" x="310" y="448">one customer view</text>
+
+  <!-- 2 Understand -->
+  <rect class="t-olive" x="565" y="78" width="235" height="392" rx="14"/>
+  <text class="h2" x="585" y="120">Signal layer</text>
+  <rect class="box" x="585" y="150" width="195" height="46" rx="8"/><text class="lbl" x="601" y="180">AI_COMPLETE</text>
+  <rect class="box" x="585" y="208" width="195" height="46" rx="8"/><text class="lbl" x="601" y="238">AI_SENTIMENT</text>
+  <rect class="box" x="585" y="266" width="195" height="46" rx="8"/><text class="lbl" x="601" y="296">AI_SUMMARIZE</text>
+  <rect class="box" x="585" y="324" width="195" height="46" rx="8"/><text class="lbl" x="601" y="354">Business rules</text>
+  <text class="sm" x="585" y="412">Every signal carries its</text>
+  <text class="sm" x="585" y="436">evidence and confidence</text>
+
+  <!-- 3 Decide -->
+  <rect class="t-clay" x="850" y="78" width="235" height="392" rx="14"/>
+  <text class="h2" x="870" y="120">Decisions</text>
+  <rect class="box"   x="870" y="150" width="195" height="46" rx="8"/><text class="lbl" x="886" y="180">Churn &amp; retention</text>
+  <rect class="box"   x="870" y="208" width="195" height="46" rx="8"/><text class="lbl" x="886" y="238">Personalization</text>
+  <rect class="box"   x="870" y="266" width="195" height="46" rx="8"/><text class="lbl" x="886" y="296">Service recovery</text>
+  <rect class="ghost" x="870" y="324" width="195" height="46" rx="8"/><text class="lbl" x="886" y="354" style="fill:#5E5D59">+ next use case</text>
+  <text class="sm" x="870" y="412">Deterministic and</text>
+  <text class="sm" x="870" y="436">aware of each other</text>
+
+  <!-- 4 Act -->
+  <rect class="t-kraft" x="1135" y="78" width="215" height="392" rx="14"/>
+  <text class="h2" x="1155" y="120">Experiences</text>
+  <rect class="box" x="1155" y="150" width="175" height="46" rx="8"/><text class="lbl" x="1171" y="180">My Feed</text>
+  <rect class="box" x="1155" y="208" width="175" height="46" rx="8"/><text class="lbl" x="1171" y="238">Ask the data</text>
+  <rect class="box" x="1155" y="266" width="175" height="46" rx="8"/><text class="lbl" x="1171" y="296">Cortex Agent</text>
+  <rect class="box" x="1155" y="324" width="175" height="46" rx="8"/><text class="lbl" x="1171" y="354">Scenario Studio</text>
+  <text class="sm" x="1155" y="412">Humans approve</text>
+  <text class="sm" x="1155" y="436">what matters</text>
+
+  <!-- flow -->
+  <path class="arrow" d="M244,270 L284,270"/>
+  <path class="arrow" d="M519,270 L559,270"/>
+  <path class="arrow" d="M804,270 L844,270"/>
+  <path class="arrow" d="M1089,270 L1129,270"/>
+
+  <!-- learning loop -->
+  <path class="arrow-c" d="M1242,474 C1242,514 967,514 967,478"/>
+  <text class="sm mid" x="1105" y="530" style="fill:#B4583A">outcomes improve the next recommendation</text>
+
+  <!-- foundation bands -->
+  <rect class="panel" x="290" y="550" width="510" height="64" rx="10"/>
+  <text class="cap" x="310" y="575">Orchestration</text>
+  <text class="lbl" x="310" y="602" style="font-size:18px">Streams &amp; Tasks · scheduled discovery · Snowpark</text>
+
+  <rect class="panel" x="850" y="550" width="500" height="64" rx="10"/>
+  <text class="cap" x="870" y="575">Governance</text>
+  <text class="lbl" x="870" y="602" style="font-size:18px">Personas · approval limits · full audit trail</text>
+</svg>
+</body></html>

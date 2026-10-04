@@ -1,0 +1,67 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"><title>Layer 3 · Decide</title></head>
+<body>
+<svg width="1380" height="630" viewBox="0 0 1380 630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#141413"/></marker>
+    <marker id="ahm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5E5D59"/></marker>
+    <marker id="ahc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#D97757"/></marker>
+  </defs>
+
+  <!-- shared signals -->
+  <rect class="t-olive" x="40" y="40" width="1300" height="64" rx="12"/>
+  <text class="h2" x="64" y="81" style="font-size:24px">Shared signal layer</text>
+  <text class="sm" x="320" y="80" style="fill:#3F4A33">One vocabulary every engine reads. No engine writes to another.</text>
+
+  <path class="arrow" d="M195,108 L195,150"/>
+  <path class="arrow" d="M525,108 L525,150"/>
+  <path class="arrow" d="M855,108 L855,150"/>
+  <path class="arrow-d" d="M1185,108 L1185,150"/>
+
+  <!-- engines -->
+  <rect class="t-clay" x="40" y="156" width="310" height="262" rx="14"/>
+  <text class="h2" x="62" y="198" style="font-size:24px">Churn &amp; retention</text>
+  <text class="serif" x="62" y="236" style="font-size:20px;font-style:italic">“Will they leave?”</text>
+  <line class="line" x1="62" y1="258" x2="328" y2="258"/>
+  <text class="sm" x="62" y="292">Gated by risk state</text>
+  <text class="sm" x="62" y="320">Weighted per role</text>
+  <text class="lbl" x="62" y="390" style="font-weight:600">10 actions</text>
+
+  <rect class="t-sky" x="370" y="156" width="310" height="262" rx="14"/>
+  <text class="h2" x="392" y="198" style="font-size:24px">Personalization</text>
+  <text class="serif" x="392" y="236" style="font-size:20px;font-style:italic">“What fits them?”</text>
+  <line class="line" x1="392" y1="258" x2="658" y2="258"/>
+  <text class="sm" x="392" y="292">Matched on signals</text>
+  <text class="sm" x="392" y="320">First buy and renewal</text>
+  <text class="lbl" x="392" y="390" style="font-weight:600">11 products</text>
+
+  <rect class="t-kraft" x="700" y="156" width="310" height="262" rx="14"/>
+  <text class="h2" x="722" y="198" style="font-size:24px">Service recovery</text>
+  <text class="serif" x="722" y="236" style="font-size:20px;font-style:italic">“What do we owe them?”</text>
+  <line class="line" x1="722" y1="258" x2="988" y2="258"/>
+  <text class="sm" x="722" y="292">Matched on signals</text>
+  <text class="sm" x="722" y="320">Added as configuration only</text>
+  <text class="lbl" x="722" y="390" style="font-weight:600">5 remedies</text>
+
+  <rect class="ghost" x="1030" y="156" width="310" height="262" rx="14"/>
+  <text class="h2" x="1052" y="198" style="font-size:24px;fill:#5E5D59">Next use case</text>
+  <text class="serif" x="1052" y="236" style="font-size:20px;font-style:italic;fill:#5E5D59">collections, win-back…</text>
+  <line class="line" x1="1052" y1="258" x2="1318" y2="258"/>
+  <text class="sm" x="1052" y="292">1 · register the domain</text>
+  <text class="sm" x="1052" y="320">2 · add candidates</text>
+  <text class="sm" x="1052" y="348">3 · add matching rules</text>
+  <text class="lbl" x="1052" y="390" style="font-weight:600;fill:#5E5D59">no engine code</text>
+
+  <!-- cross-domain awareness -->
+  <path class="arrow-c" d="M330,440 C330,470 520,470 520,428"/>
+  <path class="arrow-c" d="M330,440 C330,486 850,486 850,428"/>
+  <text class="sm" x="40" y="476" style="fill:#B4583A;font-weight:600">Cross-domain</text>
+  <text class="sm" x="40" y="500" style="fill:#B4583A">no upsell while a customer</text>
+  <text class="sm" x="40" y="524" style="fill:#B4583A">is at risk or owed a fix</text>
+
+  <!-- registry -->
+  <rect class="t-heather" x="370" y="532" width="970" height="68" rx="12"/>
+  <text class="cap" x="394" y="560">Decision registry</text>
+  <text class="lbl" x="394" y="588" style="font-size:18px">Each engine is isolated configuration. Adding or changing one never touches another.</text>
+</svg>
+</body></html>

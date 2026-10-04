@@ -1,0 +1,41 @@
+Metadata-Version: 2.3
+Name: markitdown
+Version: 0.0.1a1
+Project-URL: Documentation, https://github.com/microsoft/autogen#readme
+Project-URL: Issues, https://github.com/microsoft/autogen/issues
+Project-URL: Source, https://github.com/microsoft/autogen
+Author-email: Adam Fourney <adamfo@microsoft.com>
+License: MIT
+Classifier: Development Status :: 4 - Beta
+Classifier: Programming Language :: Python
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: Implementation :: CPython
+Classifier: Programming Language :: Python :: Implementation :: PyPy
+Requires-Python: >=3.8
+Description-Content-Type: text/markdown
+
+# MarkItDown
+
+[![PyPI - Version](https://img.shields.io/pypi/v/markitdown.svg)](https://pypi.org/project/markitdown)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/markitdown.svg)](https://pypi.org/project/markitdown)
+
+-----
+
+## Table of Contents
+
+- [Installation](#installation)
+- [License](#license)
+
+## Installation
+
+```console
+pip install markitdown
+```
+
+## License
+
+`markitdown` is distributed under the terms of the [MIT](https://spdx.org/licenses/MIT.html) license.

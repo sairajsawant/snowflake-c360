@@ -1,0 +1,48 @@
+/*
+  Shared look for every diagram — modelled on Anthropic research-blog figures:
+  ivory canvas, thin ink strokes, soft tinted fills, a serif for headings and a
+  clean sans for labels. Change a colour here and every diagram follows.
+*/
+:root {
+  --canvas: #FAF9F5;
+  --ink: #141413;
+  --muted: #5E5D59;
+  --rule: #B9B6AC;
+  --white: #FFFFFF;
+
+  --clay: #D97757;   --clay-t: #F5DED3;
+  --sky: #6A9BCC;    --sky-t: #DDE8F3;
+  --olive: #788C5D;  --olive-t: #E3E9D9;
+  --kraft: #C49A6C;  --kraft-t: #F0E5D3;
+  --heather: #8E8BB0; --heather-t: #E7E6F0;
+}
+
+html, body { margin: 0; padding: 0; background: var(--canvas); }
+svg { display: block; }
+
+.serif { font-family: "Tiempos Headline", "Copernicus", Georgia, "Times New Roman", serif; }
+.sans  { font-family: "Styrene A", "Söhne", -apple-system, "Helvetica Neue", Arial, sans-serif; }
+
+text { font-family: "Styrene A", "Söhne", -apple-system, "Helvetica Neue", Arial, sans-serif; fill: var(--ink); }
+.h1   { font-family: "Tiempos Headline", Georgia, serif; font-size: 30px; font-weight: 600; }
+.h2   { font-family: "Tiempos Headline", Georgia, serif; font-size: 26px; font-weight: 600; }
+.lbl  { font-size: 20px; font-weight: 500; }
+.sm   { font-size: 17px; fill: var(--muted); }
+.cap  { font-size: 15px; letter-spacing: 1.6px; text-transform: uppercase; fill: var(--muted); font-weight: 600; }
+.num  { font-family: "Tiempos Headline", Georgia, serif; font-size: 22px; font-weight: 600; fill: var(--muted); }
+.mid  { text-anchor: middle; }
+.end  { text-anchor: end; }
+
+.box     { fill: var(--white); stroke: var(--ink); stroke-width: 1.4; }
+.panel   { fill: var(--white); stroke: var(--rule); stroke-width: 1.2; }
+.ghost   { fill: none; stroke: var(--muted); stroke-width: 1.4; stroke-dasharray: 6 6; }
+.t-clay  { fill: var(--clay-t);  stroke: var(--clay);  stroke-width: 1.4; }
+.t-sky   { fill: var(--sky-t);   stroke: var(--sky);   stroke-width: 1.4; }
+.t-olive { fill: var(--olive-t); stroke: var(--olive); stroke-width: 1.4; }
+.t-kraft { fill: var(--kraft-t); stroke: var(--kraft); stroke-width: 1.4; }
+.t-heather { fill: var(--heather-t); stroke: var(--heather); stroke-width: 1.4; }
+
+.arrow   { fill: none; stroke: var(--ink); stroke-width: 1.6; marker-end: url(#ah); }
+.arrow-c { fill: none; stroke: var(--clay); stroke-width: 2; marker-end: url(#ahc); }
+.arrow-d { fill: none; stroke: var(--muted); stroke-width: 1.4; stroke-dasharray: 5 5; marker-end: url(#ahm); }
+.line    { fill: none; stroke: var(--rule); stroke-width: 1.2; }

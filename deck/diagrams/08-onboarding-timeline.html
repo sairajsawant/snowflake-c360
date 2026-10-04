@@ -1,0 +1,44 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"><title>Onboarding timeline</title></head>
+<body>
+<svg width="1380" height="630" viewBox="0 0 1380 630" xmlns="http://www.w3.org/2000/svg">
+  <!-- scale: day 0 at x=320, day 21 at x=1340 (≈48.6 px/day) -->
+  <line class="line" x1="320" y1="60" x2="320" y2="450"/>
+  <line class="line" x1="660" y1="190" x2="660" y2="450" style="stroke-dasharray:4 6"/>
+  <line class="line" x1="1000" y1="190" x2="1000" y2="450" style="stroke-dasharray:4 6"/>
+  <line class="line" x1="1340" y1="190" x2="1340" y2="450" style="stroke-dasharray:4 6"/>
+  <text class="sm" x="320"  y="476">Day 1</text>
+  <text class="sm mid" x="660"  y="476">Week 1</text>
+  <text class="sm mid" x="1000" y="476">Week 2</text>
+  <text class="sm end" x="1340" y="476">Week 3</text>
+
+  <!-- new use case -->
+  <text class="lbl" x="40" y="112" style="font-weight:600">New use case</text>
+  <text class="sm"  x="40" y="138">on existing data</text>
+  <rect class="t-clay" x="320" y="84" width="146" height="64" rx="10"/>
+  <text class="lbl" x="336" y="123" style="font-weight:600">1–3 days</text>
+  <text class="sm" x="680" y="112">Configuration only. Signals, engines,</text>
+  <text class="sm" x="680" y="136">learning loop and apps reused as they are.</text>
+
+  <line class="line" x1="40" y1="182" x2="1340" y2="182"/>
+
+  <!-- new domain -->
+  <text class="lbl" x="40" y="236" style="font-weight:600">New domain</text>
+  <text class="sm"  x="40" y="262">e.g. mutual funds,</text>
+  <text class="sm"  x="40" y="286">with a domain expert</text>
+
+  <rect class="t-sky"   x="320"  y="208" width="340" height="64" rx="10"/>
+  <text class="lbl" x="338" y="247">Map sources and ontology</text>
+  <rect class="t-olive" x="660"  y="292" width="340" height="64" rx="10"/>
+  <text class="lbl" x="678" y="331">Signals and discovery</text>
+  <rect class="t-clay"  x="1000" y="376" width="340" height="64" rx="10"/>
+  <text class="lbl" x="1018" y="415">Decision domains, go live</text>
+
+  <!-- mutual fund use cases -->
+  <text class="cap" x="40" y="532">Mutual fund customer 360, same platform</text>
+  <rect class="box" x="40"   y="552" width="300" height="52" rx="26"/><text class="lbl mid" x="190"  y="585">SIP stop risk</text>
+  <rect class="box" x="365"  y="552" width="300" height="52" rx="26"/><text class="lbl mid" x="515"  y="585">Redemption intent on calls</text>
+  <rect class="box" x="690"  y="552" width="300" height="52" rx="26"/><text class="lbl mid" x="840"  y="585">Tax-season fund fit</text>
+  <rect class="box" x="1015" y="552" width="325" height="52" rx="26"/><text class="lbl mid" x="1177" y="585">Failed mandate recovery</text>
+</svg>
+</body></html>

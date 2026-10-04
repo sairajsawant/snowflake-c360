@@ -1,0 +1,53 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"><title>Learning loop</title></head>
+<body>
+<svg width="1380" height="630" viewBox="0 0 1380 630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#141413"/></marker>
+    <marker id="ahc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#D97757"/></marker>
+  </defs>
+
+  <!-- nodes -->
+  <rect class="t-olive" x="40" y="150" width="300" height="104" rx="14"/>
+  <text class="cap" x="62" y="180" style="fill:#3F4A33">AI reads</text>
+  <text class="lbl" x="62" y="212" style="font-weight:600">Signals</text>
+  <text class="sm"  x="62" y="238">facts with evidence</text>
+
+  <rect class="box" x="540" y="36" width="300" height="104" rx="14" style="stroke-width:2"/>
+  <text class="cap" x="562" y="66">Rules decide</text>
+  <text class="lbl" x="562" y="98" style="font-weight:600">Deterministic scoring</text>
+  <text class="sm"  x="562" y="124">track record, value, cost, role</text>
+
+  <rect class="t-kraft" x="1040" y="150" width="300" height="104" rx="14"/>
+  <text class="lbl" x="1062" y="190" style="font-weight:600">Recommendation</text>
+  <text class="sm"  x="1062" y="218">ranked, explained,</text>
+  <text class="sm"  x="1062" y="240">checked against policy</text>
+
+  <rect class="t-sky" x="1040" y="420" width="300" height="104" rx="14"/>
+  <text class="lbl" x="1062" y="460" style="font-weight:600">Human decision</text>
+  <text class="sm"  x="1062" y="488">approve, modify or decline</text>
+
+  <rect class="t-heather" x="540" y="500" width="300" height="104" rx="14"/>
+  <text class="lbl" x="562" y="540" style="font-weight:600">Outcome recorded</text>
+  <text class="sm"  x="562" y="568">did it work, did risk fall</text>
+
+  <rect class="t-clay" x="40" y="420" width="300" height="104" rx="14"/>
+  <text class="lbl" x="62" y="460" style="font-weight:600">Effectiveness</text>
+  <text class="sm"  x="62" y="488">success rate and confidence</text>
+  <text class="sm"  x="62" y="510">for every action</text>
+
+  <!-- loop -->
+  <path class="arrow" d="M340,180 L534,104"/>
+  <path class="arrow" d="M840,104 L1034,180"/>
+  <path class="arrow" d="M1190,258 L1190,414"/>
+  <path class="arrow" d="M1040,500 L846,546"/>
+  <path class="arrow" d="M540,546 L346,500"/>
+  <path class="arrow-c" d="M300,416 L600,146" style="stroke-width:3"/>
+  <text class="lbl" x="458" y="316" style="fill:#B4583A;font-weight:600">learns</text>
+
+  <!-- centre -->
+  <text class="h1 mid" x="815" y="300" style="font-size:38px">AI reads. Rules decide.</text>
+  <text class="sm mid" x="815" y="340" style="font-size:20px">Same input, same answer, every time.</text>
+  <text class="sm mid" x="815" y="368" style="font-size:20px">Each outcome sharpens the next ranking.</text>
+</svg>
+</body></html>

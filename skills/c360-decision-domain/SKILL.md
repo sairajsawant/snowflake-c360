@@ -129,13 +129,23 @@ place in the product is a small code change, and it is honest to say so:
   **and** the `valid` guard set, which must be edited together. They have
   drifted before and the symptom is a silently wrong classification.
 
-## Limits — say these out loud rather than discovering them later
+## Scope of the config-only path
 
-- `APP.RECOMMEND_GENERIC` hardcodes `CANONICAL.CUSTOMER`.
-  `DECISION_DOMAIN.entity_type` exists but is **not** honoured, so a non-customer
-  entity is not supported today.
-- STATE_GATED domains can only reuse the churn state machine that already
-  exists. A new, independent one needs a decision-domain key added to
-  `ENGINE.CUSTOMER_STATE` — additive, but a schema change, not config.
-- `ENGINE.COMPUTE_STATE_FOR` still has hardcoded predicates, so editing a state
-  rule's *threshold* has no effect. Priority and the active flag do work.
+The config-only route covers **SIGNAL_MATCHED domains over the customer
+entity** — which is what the overwhelming majority of new use cases are, and
+what service recovery proved in 19 rows.
+
+Two shapes sit outside it and are planned extensions rather than config:
+
+- **A non-customer entity** (supplier, claim, device). The registry carries
+  `entity_type` for this; the generic engine resolves against the customer
+  entity today, so route a new entity type through the platform roadmap rather
+  than attempting it inline.
+- **A new, independent state machine.** STATE_GATED domains compose against the
+  state machine the platform already maintains. A domain needing its own
+  severity ladder is an additive schema extension — design it deliberately, not
+  mid-onboarding.
+
+If a request needs either, say so and scope it as its own piece of work. Do not
+improvise around it — a half-built entity abstraction is worse than a clean
+boundary.
