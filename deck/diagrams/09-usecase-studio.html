@@ -1,0 +1,105 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><link rel="stylesheet" href="style.css"><title>Use-case studio</title></head>
+<body>
+<svg width="1380" height="630" viewBox="0 0 1380 630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#141413"/></marker>
+  </defs>
+
+  <text class="cap" x="40"   y="40">Domain expert</text>
+  <text class="cap" x="300"  y="40">CoCo CLI · one skill, five subagents</text>
+  <text class="cap" x="1110" y="40">Released</text>
+
+  <!-- expert -->
+  <rect class="t-kraft" x="40" y="70" width="220" height="180" rx="16"/>
+  <text class="serif" x="60" y="112" style="font-size:20px;font-style:italic">“Find health</text>
+  <text class="serif" x="60" y="140" style="font-size:20px;font-style:italic">policyholders whose</text>
+  <text class="serif" x="60" y="168" style="font-size:20px;font-style:italic">cover no longer fits</text>
+  <text class="serif" x="60" y="196" style="font-size:20px;font-style:italic">their life…”</text>
+  <text class="sm" x="60" y="232">one brief</text>
+  <rect class="t-kraft" x="40" y="270" width="220" height="70" rx="16"/>
+  <text class="lbl" x="60" y="304" style="font-weight:600">4 approvals</text>
+  <text class="sm" x="60" y="328">approve · edit · reject</text>
+  <path class="arrow" d="M264,160 L294,160"/>
+
+  <!-- orchestrator -->
+  <rect x="300" y="70" width="770" height="88" rx="14" fill="#141413"/>
+  <text class="h2" x="324" y="108" style="fill:#FAF9F5">$c360-usecase</text>
+  <text class="sm" x="324" y="138" style="fill:#D9D6CC">orchestrator · gates · ledger</text>
+  <rect class="t-clay" x="640" y="94" width="88" height="40" rx="20"/><text class="lbl mid" x="684" y="121">G1</text>
+  <rect class="t-clay" x="746" y="94" width="88" height="40" rx="20"/><text class="lbl mid" x="790" y="121">G2</text>
+  <rect class="t-clay" x="852" y="94" width="88" height="40" rx="20"/><text class="lbl mid" x="896" y="121">G3</text>
+  <rect class="t-clay" x="958" y="94" width="88" height="40" rx="20"/><text class="lbl mid" x="1002" y="121">G4</text>
+  <path class="arrow" d="M264,305 C282,305 282,140 294,128"/>
+
+  <!-- subagents -->
+  <rect class="t-sky" x="300" y="196" width="142" height="150" rx="12"/>
+  <text class="lbl" x="314" y="230" style="font-weight:600">Scout</text>
+  <text class="sm" x="314" y="258">registries,</text>
+  <text class="sm" x="314" y="280">reuse vs build</text>
+  <text class="sm" x="314" y="328" style="fill:#B4583A">read-only · G1</text>
+
+  <rect class="t-olive" x="457" y="196" width="142" height="150" rx="12"/>
+  <text class="lbl" x="471" y="230" style="font-weight:600">Signal</text>
+  <text class="lbl" x="471" y="254" style="font-weight:600">builder</text>
+  <text class="sm" x="471" y="282">precision + CI,</text>
+  <text class="sm" x="471" y="304">self-iterates</text>
+  <text class="sm" x="471" y="328" style="fill:#B4583A">sandbox · G2</text>
+
+  <rect class="t-heather" x="614" y="196" width="142" height="150" rx="12"/>
+  <text class="lbl" x="628" y="230" style="font-weight:600">NBA</text>
+  <text class="lbl" x="628" y="254" style="font-weight:600">designer</text>
+  <text class="sm" x="628" y="282">catalog only,</text>
+  <text class="sm" x="628" y="304">cited guardrails</text>
+  <text class="sm" x="628" y="328" style="fill:#B4583A">sandbox · G3</text>
+
+  <rect class="t-heather" x="771" y="196" width="142" height="150" rx="12"/>
+  <text class="lbl" x="785" y="230" style="font-weight:600">Simulator</text>
+  <text class="sm" x="785" y="258">whole book,</text>
+  <text class="sm" x="785" y="280">before / after</text>
+  <text class="sm" x="785" y="328" style="fill:#B4583A">sandbox · G3</text>
+
+  <rect class="t-clay" x="928" y="196" width="142" height="150" rx="12"/>
+  <text class="lbl" x="942" y="230" style="font-weight:600">Release</text>
+  <text class="lbl" x="942" y="254" style="font-weight:600">manager</text>
+  <text class="sm" x="942" y="282">versioned,</text>
+  <text class="sm" x="942" y="304">one-call rollback</text>
+  <text class="sm" x="942" y="328" style="fill:#B4583A">only path · G4</text>
+
+  <path class="arrow" d="M371,162 L371,192"/>
+  <path class="arrow" d="M528,162 L528,192"/>
+  <path class="arrow" d="M685,162 L685,192"/>
+  <path class="arrow" d="M842,162 L842,192"/>
+  <path class="arrow" d="M999,162 L999,192"/>
+
+  <!-- kernel -->
+  <rect class="panel" x="300" y="380" width="770" height="170" rx="14" style="stroke:#141413"/>
+  <text class="cap" x="324" y="410">Snowflake kernel · enforced in SQL, not in prompts</text>
+  <rect class="box" x="324" y="428" width="230" height="48" rx="8"/><text class="lbl" x="340" y="459">Registries</text>
+  <rect class="box" x="570" y="428" width="230" height="48" rx="8"/><text class="lbl" x="586" y="459">Draft sandbox</text>
+  <rect class="box" x="816" y="428" width="230" height="48" rx="8"/><text class="lbl" x="832" y="459">Bounds B0–B9</text>
+  <rect class="box" x="324" y="488" width="476" height="48" rx="8"/><text class="lbl" x="340" y="519">One engine for simulation and production</text>
+  <rect class="box" x="816" y="488" width="230" height="48" rx="8"/><text class="lbl" x="832" y="519">Hash-bound approvals</text>
+  <path class="arrow" d="M685,350 L685,376"/>
+
+  <!-- output -->
+  <rect class="t-olive" x="1110" y="70" width="230" height="276" rx="16"/>
+  <text class="h2" x="1132" y="112">Live pack v1</text>
+  <text class="lbl" x="1132" y="152">19 config rows</text>
+  <text class="lbl" x="1132" y="184">2 signals built</text>
+  <text class="lbl" x="1132" y="216">6 signals reused</text>
+  <text class="lbl" x="1132" y="248">147 reached</text>
+  <text class="lbl" x="1132" y="280">0 violations</text>
+  <text class="sm" x="1132" y="320">0 lines of engine code</text>
+  <path class="arrow" d="M1074,270 L1104,270"/>
+
+  <rect class="t-clay" x="1110" y="380" width="230" height="170" rx="16"/>
+  <text class="lbl" x="1132" y="418" style="font-weight:600">A hook blocks any</text>
+  <text class="lbl" x="1132" y="444" style="font-weight:600">direct production</text>
+  <text class="lbl" x="1132" y="470" style="font-weight:600">write</text>
+  <text class="sm" x="1132" y="504">only the release</text>
+  <text class="sm" x="1132" y="528">procedure ships</text>
+
+  <text class="sm" x="40" y="594">Same skill tunes a live pack (before/after shown), refuses unsafe changes, and routes out-of-scope asks.</text>
+</svg>
+</body></html>

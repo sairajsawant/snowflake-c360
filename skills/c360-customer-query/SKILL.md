@@ -55,6 +55,7 @@ Question is about the portfolio rather than one person → skip to the
 | What retention/servicing action to take for an at-risk customer | `SELECT * FROM TABLE(CUSTOMER_360_DB.APP.RECOMMEND('<id>', 'rm1', 0::FLOAT));` |
 | What product / offer / renewal fits them | `SELECT * FROM TABLE(CUSTOMER_360_DB.APP.RECOMMEND_PRODUCT('<id>'));` |
 | What we owe them after a service failure, stuck claim, complaint | `SELECT * FROM TABLE(CUSTOMER_360_DB.APP.RECOMMEND_GENERIC('service_recovery', '<id>'));` |
+| An offer from a pack built with the use-case studio (e.g. a cover upgrade after a life event) | `SELECT decision_domain_id, label FROM CUSTOMER_360_DB.STUDIO.V_USECASE_REGISTRY WHERE implementation = 'GENERIC';` then `SELECT * FROM TABLE(CUSTOMER_360_DB.APP.RECOMMEND_PACK('<domain_id>', '<id>'));` |
 | Who needs attention across the book | `SELECT * FROM TABLE(CUSTOMER_360_DB.APP.DECISION_QUEUE('ALL', 'rm1', 'team_alpha'));` |
 | Today's prioritised worklist (all three decision types, ranked) | `SELECT * FROM TABLE(CUSTOMER_360_DB.APP.UNIFIED_FEED_FAST('ALL', 'rm1', 'team_alpha', 'rm1', 12::FLOAT));` |
 | Find past calls / tickets / emails on a topic | Cortex Search — see below |

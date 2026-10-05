@@ -1,0 +1,14 @@
+# MODIFY a live GENERIC pack. Run after A.
+brief: "--modify life_event_upgrade Super top-up is offered too widely; only offer it when the cover gap is HIGH."
+expect:
+  mode: MODIFY
+  domain: life_event_upgrade
+  gates: [G1, G3, G4]         # no new signal, so no G2
+gates:
+  G1: approve
+  G3: approve
+  G4: approve
+assert:
+  - "simulation shows before/after: customers_lost > 0, customers_gained == 0"
+  - "no live guardrail removed (B8 PASS)"
+  - "RELEASE_RUN returns RELEASED, version 2; ROLLBACK_RUN restores version 1"

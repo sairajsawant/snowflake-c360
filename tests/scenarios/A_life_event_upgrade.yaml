@@ -1,0 +1,22 @@
+# NEW pack, end to end. The demo use case.
+brief: "Find health policyholders whose cover no longer fits their life and offer the right upgrade."
+expect:
+  mode: NEW
+  domain: life_event_upgrade
+  gates: [G1, G2, G3, G4]
+answers:                      # used only if the orchestrator asks
+  priority: "protect > retain > grow — never upsell someone we owe a fix"
+  success_metric: "upgrade bought within 45 days"
+  owner: "Head of Health Products"
+gates:
+  G1: approve
+  G2: approve
+  G3: approve
+  G4: approve
+assert:
+  - "signal life_event built as AI_LABEL with precision lower bound >= 0.70"
+  - "signal cover_gap built as SQL"
+  - "every candidate has a catalog_ref in STUDIO.V_ACTION_CATALOG; anything else listed as a catalog request"
+  - "simulation violation_total == 0 and bounds.failed == 0"
+  - "RELEASE_RUN returns RELEASED, version 1"
+  - "RECOMMEND_PACK('life_event_upgrade', <example customer>) returns ranked offers with reasons"

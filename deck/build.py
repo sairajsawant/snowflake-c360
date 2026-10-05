@@ -65,7 +65,7 @@ ICON_FOR = {
     "Incremental Dynamic Tables": "Dynamic Tables", "Changed-customer streams": "Stream",
     "Daily time tick": "Time", "Signal fingerprints": "Metadata",
     "Connect real sources": "Kafka Connectors", "Actions in Slack and Jira": "Communicate",
-    "Fine-grained access": "Policy", "Cross-domain, any entity": "Enterprise", "AI onboarding wizard": "Idea",
+    "Fine-grained access": "Policy", "Cross-domain, any entity": "Enterprise", "AI onboarding wizard in Streamlit": "Idea",
     "Predictive ML signals": "Machine Learning",
 }
 _ICON_SRC = None
@@ -277,7 +277,7 @@ for i, (t, b, c) in enumerate(steps):
 tiles = [
     ("510", "customers unified, every one scored"), ("8", "source types, in English and Hinglish"),
     ("2,796", "live signals, each with its evidence"), ("3", "decision engines running side by side"),
-    ("4", "reusable CoCo CLI skills"), ("19", "config rows to add a new engine"),
+    ("5 + 5", "CoCo CLI skills and subagents"), ("19", "config rows to add a new engine"),
 ]
 for i, (n, l) in enumerate(tiles):
     cx, cy = 5.15 + (i % 2) * 2.25, 1.55 + (i // 2) * 1.23
@@ -301,7 +301,7 @@ diagram_slide(prs, "Proactive by default, with people in the loop",
 # ---------------------------------------------------------------------------
 # 10 · extensibility proof
 s = new_slide(prs, "Adding a use case takes configuration only",
-              "We added Service Recovery to the working platform. Nothing that already existed changed.")
+              "We added Service Recovery by hand. Because it's configuration, CoCo now builds the next one from a brief.")
 box(s, 0.45, 1.55, 2.95, 3.6, fill=CLAY_T)
 text(s, 0.68, 1.72, 2.6, 0.9, "19", size=60, bold=True, font=SERIF, color=CLAY_D)
 text(s, 0.68, 2.72, 2.55, 0.3, "configuration rows", size=14, bold=True)
@@ -325,7 +325,37 @@ arrow(s, 6.47, 3.2, 0.12, 0.28, fill=MUTED)
 # ---------------------------------------------------------------------------
 # 11 · CoCo CLI
 diagram_slide(prs, "Built and run with CoCo CLI",
-              "CoCo CLI seeded the data, built the platform, and publishes four reusable skills to Snowflake for any team.", "07-coco-skills")
+              "CoCo CLI seeded the data, built the platform, and publishes five skills and five subagents for any team.", "07-coco-skills")
+
+# ---------------------------------------------------------------------------
+# 11b · use-case studio (multi-agent CoCo skill)
+diagram_slide(prs, "Extend it from CoCo CLI: one brief, four approvals",
+              "An orchestrator skill and five subagents do the work. Snowflake enforces the bounds, not the prompt.",
+              "09-usecase-studio")
+
+# ---------------------------------------------------------------------------
+# 11c · use-case studio, measured
+s = new_slide(prs, "One brief to a live use case, safely",
+              "Life-Event Cover Upgrade, built on this book. The expert typed one sentence and approved four gates.")
+gates = [
+    ("G1 · PLAN", "6 + 2", "6 signals reused, 2 built: cover gap from policy and claims records, life event from what customers said.", SKY_T),
+    ("G2 · SIGNALS", "0.46 → 0.83", "Precision of the life-event signal (95% CI 0.72–0.91). The builder fixed its own definitions.", OLIVE_T),
+    ("G3 · SIMULATE", "147", "customers reached of 261 matched; 114 held back by risk or guardrail; 0 violations. An off-catalog offer was refused.", HEATHER_T),
+    ("G4 · RELEASE", "19 rows", "Version 1 live, no engine code. Rolls back in one call.", CLAY_T),
+]
+gw = (9.1 - 3 * 0.15) / 4
+for i, (cap, big, body, fill) in enumerate(gates):
+    x = 0.45 + i * (gw + 0.15)
+    box(s, x, 1.5, gw, 2.75, fill=fill)
+    text(s, x + 0.18, 1.66, gw - 0.3, 0.25, cap, size=9.5, bold=True, color=MUTED)
+    text(s, x + 0.18, 1.98, gw - 0.3, 0.55, big, size=24, bold=True, font=SERIF, color=CLAY_D if i in (1, 3) else INK)
+    text(s, x + 0.18, 2.62, gw - 0.3, 1.55, body, size=11.5, color=INK)
+box(s, 0.45, 4.4, 9.1, 0.82, fill=OAT)
+text(s, 0.68, 4.4, 8.7, 0.82,
+     [[("Then change it.  ", {"bold": True}),
+       ("Tuning shows before/after (147 → 99 reached, nobody else's offer changed). Ask for something unsafe "
+        "and Snowflake refuses it: weights are capped, guardrails can't be removed, approvals are bound to the exact draft.",
+        {"color": INK})]], size=11.5, anchor=MSO_ANCHOR.MIDDLE)
 
 # ---------------------------------------------------------------------------
 # 12 · Snowflake capabilities
@@ -343,7 +373,7 @@ feats = [
     ("Cortex Agent", "Natural-language access to every tool", OLIVE_T),
     ("Streamlit in Snowflake", "The app runs right next to the data", KRAFT_T),
     ("Masking & row access", "PII masked, each persona sees only its book", HEATHER_T),
-    ("CoCo CLI", "Built the platform and packages it as skills", HEATHER_T),
+    ("CoCo CLI", "Skills, subagents and hooks build and extend the platform", HEATHER_T),
 ]
 cw, ch = (9.1 - 3 * 0.15) / 4, 1.12
 for i, (n, d, f) in enumerate(feats):
@@ -406,8 +436,8 @@ for i, (t, b, c) in enumerate(ent):
     card(s, x, y, cw, 1.47, t, b, accent=c, body_size=11.5)
 box(s, 0.45, 4.6, 9.1, 0.62, fill=OAT)
 text(s, 0.68, 4.6, 8.7, 0.62,
-     [[("Configuration-driven.  ", {"bold": True}),
-       ("Weights, limits, rules, signals and whole use cases change without a release.", {"color": MUTED})]],
+     [[("Safe change, built in.  ", {"bold": True}),
+       ("New and changed use cases pass approval gates, a whole-book simulation and hard bounds, and roll back in one call.", {"color": MUTED})]],
      size=12, anchor=MSO_ANCHOR.MIDDLE)
 
 # ---------------------------------------------------------------------------
@@ -466,8 +496,8 @@ va.has_major_gridlines = False
 
 # ---------------------------------------------------------------------------
 # 16 · scalability
-diagram_slide(prs, "New use cases in days, new domains in weeks",
-              "Everything above the data mapping is reused. A domain expert shapes the ontology; the platform does the rest.",
+diagram_slide(prs, "New use cases in one session, new domains in weeks",
+              "CoCo builds use cases on existing data from a brief. For a new domain, an expert shapes the ontology; the rest is reused.",
               "08-onboarding-timeline")
 
 # ---------------------------------------------------------------------------
@@ -498,7 +528,7 @@ nxt = [
     ("Actions in Slack and Jira", "Approved actions post to the RM's channel and open a ticket automatically.", "2–3 days", OLIVE),
     ("Fine-grained access", "Extend row access by region and branch, and masking to every new source.", "2–3 days", HEATHER),
     ("Cross-domain, any entity", "The same engines over households, SME accounts or policies, with shared suppression across all of them.", "1–2 weeks", KRAFT),
-    ("AI onboarding wizard", "Describe a use case or signal in plain English. AI drafts the configuration and a person approves it.", "1–2 weeks", CLAY),
+    ("AI onboarding wizard in Streamlit", "The use-case studio as a guided screen in the app: describe a use case, review each gate, approve.", "1–2 weeks", CLAY),
     ("Predictive ML signals", "Snowflake ML forecasts which customers are trending toward decline and which product they'll need next, before it shows in a call.", "1–2 weeks", SKY),
 ]
 for i, (t, d, e, c) in enumerate(nxt):

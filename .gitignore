@@ -1,4 +1,5 @@
-.cortex/
+.cortex/plans/
+.cortex/settings.local.json
 __pycache__/
 *.pyc
 .env

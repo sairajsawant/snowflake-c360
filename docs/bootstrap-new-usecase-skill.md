@@ -1,5 +1,10 @@
 # Skill: bootstrap a new decision use case on this platform
 
+> **This recipe is now automated.** `$c360-usecase` in CoCo CLI turns a domain
+> expert's brief into a released use case through four approval gates — see
+> [the use-case studio](usecase-studio.md). This document stays as the manual
+> reference for what the studio does underneath.
+
 This is a transcription, not a proposal — it's the exact recipe followed twice
 on this codebase (churn/retention in `sql/app/01-13`, personalization in
 `sql/app/17-18`), extracted so a third use case (underwriting, collections

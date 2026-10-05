@@ -8,6 +8,12 @@ emails and tickets — into a single live customer view, reads what customers ac
 say with Cortex AI, recommends the next best action with approved business rules, and
 learns from every outcome. Everything runs inside Snowflake.
 
+**And it extends itself, safely.** A domain expert describes a new use case in one
+sentence in CoCo CLI. A multi-agent CoCo skill builds the signals, designs the offers
+and guardrails, simulates the change on every customer and releases it as a versioned,
+reversible configuration change — after four approvals, within bounds Snowflake
+enforces. New use cases stop being projects. [How it works ↓](#use-case-studio-a-multi-agent-coco-skill-that-extends-the-platform-safely)
+
 ---
 
 ## Try it
@@ -23,6 +29,7 @@ learns from every outcome. Everything runs inside Snowflake.
 | **Role** | `C360_JUDGE` (default) |
 | **Warehouse** | `COMPUTE_WH` (default) |
 | **MFA** | Required. Snowflake asks for MFA setup on first login |
+| **Extend it (CoCo CLI)** | `$c360-usecase Find health policyholders whose cover no longer fits their life and offer the right upgrade` — see [step 16](#how-to-test-each-feature) |
 
 > **First login:** Snowflake requires multi-factor authentication for every Snowsight
 > password login. After you enter the password, follow the prompt to register an
@@ -80,6 +87,13 @@ model. Five ideas carry it:
 5. **Configuration-driven.** Signals, weights, limits, rules — and whole new use cases — are
    configuration. A third decision engine (Service Recovery) was added with 19 configuration
    rows and no engine code.
+6. **Extends itself, within bounds.** Because a use case is configuration, a CoCo
+   orchestrator skill and five specialist subagents can build one from a domain expert's
+   brief: new signals measured for precision, offers only from the catalog, cited
+   guardrails, a whole-book simulation through the production engine, and a release that
+   Snowflake refuses unless the exact draft was simulated and approved. This is the part
+   other Customer 360 builds don't have: the platform gets richer with every use case,
+   and the next one is faster.
 
 ---
 
@@ -95,6 +109,7 @@ model. Five ideas carry it:
 | **4 · Act** | My Feed, chat, Cortex Agent and Scenario Studio; approvals by role; outcomes feed the learning loop | Streamlit in Snowflake, Cortex Agent, Cortex Search |
 | **Orchestration** | Scheduled pipeline, change detection, daily signal discovery | Streams & Tasks, Snowpark Python |
 | **Governance** | Personas and scopes, approval limits, full audit trail with undo | Role-based access |
+| **Extend** | Use-case studio: brief → signals → playbook → simulation → versioned release, with approval gates, bounds and rollback | CoCo CLI skill + subagents + hooks, Snowpark Python, Cortex AI |
 
 ---
 
@@ -227,6 +242,13 @@ The four skills are published to the stage `@CUSTOMER_360_DB.APP.SKILLS/`. With 
 connected to the account, add them with `cortex skill add @CUSTOMER_360_DB.APP.SKILLS/`,
 confirm with `cortex skill list`, then ask *"What should we do about Suresh Reddy?"*.
 
+**16. Use-case studio (CoCo CLI, multi-agent)**
+From a clone of this repository (so CoCo picks up `.cortex/agents` and the hook), run
+`$c360-usecase Find health policyholders whose cover no longer fits their life and offer the right upgrade`
+and answer `approve` at each of the four gates. Or run it unattended:
+`$c360-usecase --replay tests/scenarios/A_life_event_upgrade.yaml`. Then try
+`tests/scenarios/C_bounds_hold.yaml` to watch the bounds refuse an unsafe change.
+
 ---
 
 ## Snowflake capabilities used
@@ -245,6 +267,7 @@ confirm with `cortex skill list`, then ask *"What should we do about Suresh Redd
 | Streamlit in Snowflake | the app, running next to the data |
 | Role-based access | each persona sees only its own book |
 | CoCo CLI | built the platform and packages it as reusable skills |
+| CoCo CLI subagents and hooks | the use-case studio: five specialist agents under one orchestrator skill; a hook that blocks direct production writes |
 
 ## CoCo CLI
 
@@ -258,6 +281,86 @@ published to a Snowflake stage.
 | **c360-signal-onboarding** | discovers, reviews and adds new signals for every engine to use |
 | **c360-decision-domain** | onboards a new decision use case as configuration |
 | **c360-decision-audit** | verifies a decision engine is repeatable, guarded and learning |
+| **c360-usecase** | the use-case studio orchestrator below: brief in, released use case out |
+
+### Use-case studio: a multi-agent CoCo skill that extends the platform safely
+
+> **Our differentiator.** New use cases stop being projects: a domain expert adds or
+> tunes one from CoCo CLI, every change is simulated on the whole book and bounded by
+> Snowflake, and every release is versioned and reversible. Full guide, comparison and
+> demo script: [docs/usecase-studio.md](docs/usecase-studio.md).
+
+A domain expert types one brief into CoCo CLI. One orchestrator skill takes it to
+a released, versioned use case, with the expert approving four gates and nothing
+else. Five specialist **CoCo subagents** (`.cortex/agents/`) do the work of each
+layer:
+
+| Gate | Subagent | What it does |
+|---|---|---|
+| G1 · card and plan | **c360-scout** (read-only) | reads the registries and the data; reuse vs build, tool choice, success metric, overlaps with live packs |
+| G2 · signals | **c360-signal-builder** | builds new signals from records (SQL) or from what customers said (AI with a fixed label list and the quote); measures precision with a 95% interval; tightens its own definitions until they pass |
+| G3 · playbook and simulation | **c360-nba-designer**, **c360-simulator** | offers from the catalog only, cited guardrails; the whole book run through the production engine: reach, mix, held-back customers, conflicts, before/after |
+| G4 · release | **c360-release-manager** | the only path to production: versioned, with one-call rollback |
+
+**Agents are roles, skills are procedures, registries make it generic.** The
+agents never hard-code insurance: they read the signal, action and use-case
+registries, so the same skill works for any line of business.
+
+**Standardised, simulated, bounded — enforced in Snowflake, not in prompts**
+(`sql/app/26_usecase_studio.sql`):
+
+- **One engine.** The simulation uses the same engine production serves from,
+  verified row for row against the live generic engine. What you simulate is
+  what ships.
+- **Bounds B0–B9.** Weights capped, offers only from the catalog, every
+  guardrail cited, guardrails can never be removed, legacy engines can't be
+  edited, no dead rules or empty signals.
+- **Hash-bound approvals.** Change the draft after an approval and the
+  approval no longer counts; the release procedure refuses.
+- **A hook** (`.cortex/hooks/guard_prod.py`) blocks any direct write outside
+  the sandbox, so even a misbehaving agent can't touch production.
+- **Reversible.** Each release snapshots what it replaced; rollback restores it exactly.
+
+![Use-case studio](docs/images/usecase-studio.png)
+
+#### Try it with one use case: Life-Event Cover Upgrade
+
+```text
+$c360-usecase Find health policyholders whose cover no longer fits their life and offer the right upgrade
+```
+
+You answer `approve` four times. What happens in between (measured on this book):
+
+| Gate | What you see |
+|---|---|
+| **G1 · card and plan** | in scope, NEW pack, tier GROW; signals reused (`product_interest`, `renewal_proximity`, plus four guardrail signals) and two to build: `cover_gap` from policy and claims records, `life_event` from what customers said |
+| **G2 · signals** | `cover_gap` on 220 customers. `life_event` labels marriage, pregnancy or newborn, parent dependent: first definitions scored precision 0.46 (an existing wife counted as a marriage, a mother-in-law as a parent); the builder tightened them itself to **0.83, 95% interval 0.72–0.91**, above the 0.70 gate |
+| **G3 · playbook and simulation** | three offers, all from the catalog; "add a member to the floater" isn't in the catalog, so it's a catalog request, not an invented offer. Four cited guardrails. Whole book: 261 customers match, **147 reached**, 114 held back (92 at churn risk, 22 by guardrails), 3 conflicts with service recovery flagged, **0 violations**, deterministic |
+| **G4 · release** | version 1 goes live as **19 configuration rows**, no engine code. `APP.RECOMMEND_PACK('life_event_upgrade', 'INS-2001')` returns Maternity Cover Add-on, because of a pregnancy mention and maternity interest |
+
+Then change it:
+
+```text
+$c360-usecase --modify life_event_upgrade Super top-up is offered too widely; only offer it when the cover gap is HIGH.
+```
+
+The simulation shows before/after (147 → 99 reached, 48 lost, nobody else's offer changed),
+and the release becomes version 2. Ask for something unsafe — *"weight 5 on cover gap and
+drop the poor-service guardrail"* — and the bounds refuse both (B4, B8) with the reason.
+`CALL CUSTOMER_360_DB.STUDIO.ROLLBACK_RUN('<run_id>')` puts back exactly what was there.
+
+#### Why it fits this platform so well
+
+The studio adds no new engine. It stands on what the platform already is:
+use cases are configuration (the decision registry), signals share one vocabulary with
+evidence (the signal layer), decisions are deterministic (so a simulation is an exact
+preview), and every write is auditable and reversible (run logging and undo). The studio
+just makes that configuration safe for a domain expert to change — and every run leaves
+the catalogs richer, so the next use case reuses more and builds less.
+
+The same skill tunes a live pack (showing before/after), refuses unsafe changes
+with the reason, and routes out-of-scope requests such as claim auto-approval.
+Replay scenarios in `tests/scenarios/` run the whole flow without a person.
 
 ---
 
@@ -290,20 +393,29 @@ Generation is deterministic (`scripts/generate_scale.py`). No real customer data
 - **Evidence for every signal** — each AI signal keeps the quote and confidence behind it.
 - **Repeatable decisions** — the same input always gives the same answer.
 - **Full audit trail** — every recommendation, action and outcome is recorded and reversible.
+- **Safe change** — new and changed use cases go through approval gates, a whole-book
+  simulation and hard bounds; approvals are bound to the exact draft; every release is
+  versioned and rolls back in one call; agents physically can't write to production.
 
 ## Built to extend
 
-- **A new use case in 1–3 days.** Register a domain, add candidates and matching rules.
-  Service Recovery was added this way: 19 configuration rows, no engine changes, and the
-  existing engines returned identical results before and after.
+- **A new use case in one CoCo CLI session.** The use-case studio turns a domain expert's
+  brief into a released pack: reused and new signals, catalog offers, cited guardrails,
+  a simulation of every customer, four approvals. The life-event upgrade below came to
+  19 configuration rows and no engine code — the same size as Service Recovery, which was
+  built by hand.
+- **Any domain, same skill.** The agents read the platform's registries — signals, offers,
+  use cases, capabilities — and never hard-code insurance. Point them at lending,
+  mutual funds or telecom and the same orchestrator, gates and bounds apply.
 - **A new domain in about 3 weeks** with a domain expert — for example mutual funds, with
   use cases like SIP stop risk, redemption intent on calls, tax-season fund fit and failed
   mandate recovery.
 - **Scales at marginal cost.** The customer view refreshes incrementally, so AI cost grows
   with new conversations and rule cost with changed customers, not with the size of the book.
 - **Next:** connect real CRM, policy, loan and contact-centre sources; post approved actions
-  to Slack and Jira; finer access policies by region and branch; an AI wizard that drafts a
-  new use case's configuration for a person to approve.
+  and studio gates to Slack and Jira; finer access policies by region and branch; an AI
+  onboarding wizard in Streamlit that puts the studio's gates on a guided screen; let the
+  studio also onboard new sources and train ML signals once outcomes accumulate.
 
 ## Repository layout
 
@@ -311,7 +423,10 @@ Generation is deterministic (`scripts/generate_scale.py`). No real customer data
 |---|---|
 | `sql/` | platform build, layer by layer |
 | `streamlit/` | the app |
-| `skills/` | the four CoCo CLI skills |
+| `skills/` | the five CoCo CLI skills, including the `c360-usecase` orchestrator |
+| `.cortex/` | CoCo subagents (`agents/`) and the production-write guard hook (`hooks/`, `settings.json`) |
+| `tests/scenarios/` | replayable use-case studio scenarios (new pack, tune, bounds, out of scope) |
+| `runs/` | artifacts of each use-case studio run: card, plan, signals, playbook, simulation, release |
 | `deck/` | submission deck and its editable architecture diagrams |
-| `docs/` | architecture image and the use-case onboarding playbook |
+| `docs/` | architecture images, the use-case studio guide and the manual onboarding playbook |
 | `scripts/` | data generation helpers |

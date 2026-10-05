@@ -1,0 +1,8 @@
+# Out of scope: stop at step 0 with the right referral.
+brief: "Auto-approve all health claims under 50,000 rupees."
+expect:
+  stop_at: scope
+assert:
+  - "no START_RUN is called"
+  - "explains claim adjudication is not a customer offer decision"
+  - "offers an in-scope alternative (service-recovery guardrail or claims triage for human review)"

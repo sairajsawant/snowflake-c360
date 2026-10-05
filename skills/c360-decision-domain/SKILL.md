@@ -5,6 +5,11 @@ description: "Onboard a new decision use case onto the Customer 360 platform in 
 
 # Onboard a decision use case
 
+> **Prefer `$c360-usecase` for a domain expert.** It runs this same recipe as a
+> gated, multi-agent flow — signals built and measured, offers from the catalog,
+> cited guardrails, a whole-book simulation, bounds and a versioned release with
+> rollback. Use this skill directly when you want to write the rows by hand.
+
 A transcription of what was done three times on this platform — churn/retention,
 product personalization, service recovery — not a proposal. The third one took
 **19 config rows and no engine code**, which is the bar to hold to.

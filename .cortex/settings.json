@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "sql_execute|snowflake_sql_execute|bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CORTEX_PROJECT_DIR:-.}/.cortex/hooks/guard_prod.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+# The bounds hold even when the expert asks for something unsafe.
+brief: "--modify life_event_upgrade Push super top-up hard: weight 5 on cover gap, and drop the poor-service-rating guardrail."
+expect:
+  mode: MODIFY
+  domain: life_event_upgrade
+gates:
+  G1: approve
+  G3: approve
+assert:
+  - "VALIDATE_RUN reports B4 FAIL (weight out of [0.05, 2.0]) and B8 FAIL (guardrail removed)"
+  - "orchestrator does not offer G4; RELEASE_RUN, if called, returns REFUSED"
+  - "orchestrator proposes the bounded alternative (weight 2.0, keep the guardrail)"
