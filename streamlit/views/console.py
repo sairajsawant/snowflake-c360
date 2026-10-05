@@ -203,10 +203,11 @@ def approvals(persona):
 def customer_360(persona):
     cdf = sf.customers()
     ids = list(cdf.CUSTOMER_ID)
+    names = dict(zip(cdf.CUSTOMER_ID, cdf.FULL_NAME))
     cid = st.selectbox("Customer", ids,
                        index=ids.index(st.session_state.get("cid", ids[0]))
                        if st.session_state.get("cid") in ids else 0,
-                       format_func=lambda i: f"{i} — {cdf[cdf.CUSTOMER_ID == i].iloc[0]['FULL_NAME']}")
+                       format_func=lambda i: f"{i} — {names[i]}")
     st.session_state["cid"] = cid
     p = sf.profile(cid)
     if p is None:

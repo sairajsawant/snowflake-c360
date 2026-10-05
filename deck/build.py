@@ -275,8 +275,8 @@ for i, (t, b, c) in enumerate(steps):
     text(s, 1.1, y - 0.02, 3.6, 0.28, t, size=14, bold=True)
     text(s, 1.1, y + 0.28, 3.65, 0.55, b, size=11, color=MUTED)
 tiles = [
-    ("30", "customers unified, every one scored"), ("8", "source types, in English and Hinglish"),
-    ("184", "live signals, each with its evidence"), ("3", "decision engines running side by side"),
+    ("510", "customers unified, every one scored"), ("8", "source types, in English and Hinglish"),
+    ("2,796", "live signals, each with its evidence"), ("3", "decision engines running side by side"),
     ("4", "reusable CoCo CLI skills"), ("19", "config rows to add a new engine"),
 ]
 for i, (n, l) in enumerate(tiles):
@@ -288,7 +288,7 @@ for i, (n, l) in enumerate(tiles):
 diagram_slide(prs, "Architecture: four independent layers",
               "Each layer reads only from the one before it, so any layer can change without touching the rest.", "01-hld")
 diagram_slide(prs, "Layer 1 · Every touchpoint, one customer",
-              "A small, high-quality Indian dataset. Dynamic Tables keep it current; a semantic view gives everyone the same definitions.", "02-data-layer")
+              "510 Indian customers. Dynamic Tables keep it current; a semantic view gives everyone the same definitions.", "02-data-layer")
 diagram_slide(prs, "Layer 2 · AI turns conversations into evidence",
               "AI extracts facts into a fixed vocabulary, and every signal keeps the sentence that justifies it.", "03-signal-layer")
 diagram_slide(prs, "Layer 3 · Isolated engines on a shared vocabulary",
@@ -414,9 +414,9 @@ text(s, 0.68, 4.6, 8.7, 0.62,
 # 15 · impact
 s = new_slide(prs, "Impact", "Measured on the prototype's live data.")
 imp = [
-    ("93 of 184", "signals come only from what customers said, invisible to structured systems"),
-    ("5", "customers caught who had fallen through the gaps"),
-    ("~1 sec", "to rank every customer into today's worklist"),
+    ("1,245", "of 2,796 signals come only from what customers said, invisible to structured systems"),
+    ("38", "at-risk customers caught only from what they said, with nothing in their records"),
+    ("~2 sec", "to rank all 510 customers into today's worklist"),
     ("1 question", "from a customer question to a recommended action"),
 ]
 for i, (n, l) in enumerate(imp):
@@ -428,12 +428,12 @@ text(s, 0.45, 4.3, 4.45, 0.9,
         {"color": MUTED})]], size=11)
 cd = CategoryChartData()
 cd.categories = ["Risk", "Service", "Opportunity"]
-cd.add_series("Read by AI from conversations", (82, 6, 5))
-cd.add_series("Derived by rules from records", (31, 15, 45))
+cd.add_series("Read by AI from conversations", (1078, 0, 167))
+cd.add_series("Derived by rules from records", (424, 325, 802))
 gf = s.shapes.add_chart(XL_CHART_TYPE.BAR_STACKED, Inches(5.1), Inches(1.5), Inches(4.45), Inches(3.75), cd)
 ch = gf.chart
 ch.has_title = True
-ch.chart_title.text_frame.text = "Where the 184 signals come from"
+ch.chart_title.text_frame.text = "Where the 2,796 signals come from"
 tp = ch.chart_title.text_frame.paragraphs[0]
 tp.runs[0].font.size = Pt(12); tp.runs[0].font.bold = True; tp.runs[0].font.name = SANS
 tp.runs[0].font.color.rgb = rgb(INK)
@@ -451,6 +451,8 @@ plot.has_data_labels = True
 dl = plot.data_labels
 dl.font.size = Pt(10); dl.font.color.rgb = rgb("FFFFFF"); dl.font.bold = True
 dl.position = XL_LABEL_POSITION.CENTER
+dl.number_format = '#,##0;;'   # hide zero-width segments' labels
+dl.number_format_is_linked = False
 ca, va = ch.category_axis, ch.value_axis
 ca.tick_labels.font.size = Pt(11); ca.tick_labels.font.color.rgb = rgb(INK)
 ca.format.line.color.rgb = rgb(RULE)

@@ -234,10 +234,10 @@ def step_stage():
         st.markdown("##### Who")
         cdf = sf.customers()
         ids = list(cdf["CUSTOMER_ID"])
-        cid = st.selectbox("Customer — any of the 30", ids,
+        names = dict(zip(cdf["CUSTOMER_ID"], cdf["FULL_NAME"]))
+        cid = st.selectbox(f"Customer — any of the {len(ids)}", ids,
                            index=ids.index(st.session_state["cid"]),
-                           format_func=lambda i: f"{i} — "
-                           f"{cdf[cdf.CUSTOMER_ID == i].iloc[0]['FULL_NAME']}")
+                           format_func=lambda i: f"{i} — {names[i]}")
         if cid != st.session_state["cid"]:
             st.session_state["cid"] = cid
             reset_run()

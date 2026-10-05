@@ -110,7 +110,7 @@ Every figure is read back from Snowflake after the write that produced it.
 
 | Step | What happens |
 |---|---|
-| **Stage an event** | Choose any of the 30 customers. Describe what happened in your own words and AI writes a realistic call grounded in that customer's real policies and claims — or pick a past call, or paste your own |
+| **Stage an event** | Choose any of the 510 customers. Describe what happened in your own words and AI writes a realistic call grounded in that customer's real policies and claims — or pick a past call, or paste your own |
 | **Detect** | The call is stored and read for signals; each one shows the evidence quote and confidence |
 | **Understand** | The customer's state is recomputed; conflicting evidence is resolved by severity |
 | **Decide** | Approved actions are ranked for your role, with the scoring explained and every spending limit checked |
@@ -263,17 +263,24 @@ published to a Snowflake stage.
 
 ## Data
 
-A small, high-quality synthetic Indian dataset, generated with CoCo CLI from Kaggle and
-IRDAI samples. No real customer data is used.
+A synthetic Indian book, generated with CoCo CLI. The first 30 customers were seeded from
+Kaggle and IRDAI samples; the book was then scaled to 510 using those customers as the
+reference — same tables, same value ranges, same ticket and email templates — with no other
+data source. Each new customer follows one story (a delayed claim, a premium shock, a
+cashless denial at the hospital, mis-selling, a delisted hospital, failed auto-debits, an
+affordability downgrade, repeated service failures, a group renewal at risk, or interest in
+maternity, senior, critical-illness, OPD, super top-up or corporate top-up cover), and that
+story drives every record, so the whole signal vocabulary fires from independent sources.
+Generation is deterministic (`scripts/generate_scale.py`). No real customer data is used.
 
 | | |
 |---|---|
-| Customers | 30 (20 health insurance, 10 retail lending) |
-| Source tables | 18, about 870 records |
-| Conversations | 34 call transcripts in English and Hinglish, 162 emails, 151 support tickets |
-| Transactions | policies and 249 policy versions, 81 payments, claims, loans |
-| Reference | 11 product documents, IRDAI grievances and portability requests |
-| Live signals | 184, half of them read from what customers said |
+| Customers | 510 (500 health insurance, 10 retail lending), across 15 relationship managers in 5 teams |
+| Source tables | 18, about 11,900 records |
+| Conversations | 295 call transcripts in English and Hinglish, 2,058 emails, 1,523 support tickets |
+| Transactions | 652 policies and 3,617 policy versions, 1,903 payments, 215 claims, 15 loans |
+| Reference | 11 product documents, 38 IRDAI grievances, 54 portability requests, 35 employer groups |
+| Live signals | 2,796 across 19 signal types; 1,245 read by AI from what customers said, each with its quote |
 
 ## Enterprise readiness
 
