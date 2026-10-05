@@ -34,6 +34,14 @@ def feed(persona):
 
     with st.spinner("Ranking your customers…"):
         f = sf.unified_feed(row["DATA_SCOPE_TYPE"], persona, persona, "team_alpha")
+        # offers from use cases released by the CoCo use-case studio, for customers
+        # the three core engines have nothing for today (top 5, best fit first)
+        pk = sf.pack_feed(row["DATA_SCOPE_TYPE"], persona, "team_alpha")
+        pack_total = 0
+        if len(pk):
+            pk = pk[~pk.CUSTOMER_ID.isin(f.CUSTOMER_ID)] if len(f) else pk
+            pack_total = len(pk)
+            f = pd.concat([f, pk.head(5)], ignore_index=True)
 
     if not len(f):
         st.info("Nothing needs your attention right now.")
@@ -50,7 +58,8 @@ def feed(persona):
                      "ticket, or poor satisfaction. Put right before anything is sold.")
     k[3].metric("Opportunities", len(opportunity))
 
-    total = int(f["ELIGIBLE_TOTAL"].iloc[0]) if "ELIGIBLE_TOTAL" in f.columns else len(f)
+    total = (int(f["ELIGIBLE_TOTAL"].dropna().iloc[0]) if "ELIGIBLE_TOTAL" in f.columns
+             and f["ELIGIBLE_TOTAL"].notna().any() else len(f) - min(5, pack_total)) + pack_total
     if total > len(f):
         st.caption(f"Showing the top {len(f)} of {total} customers who need something today — "
                    "work down the list and refresh for the rest.")
@@ -65,6 +74,9 @@ def feed(persona):
                 "OPPORTUNITY": ("Opportunity", "#2E7D52"),
             }.get(r["FEED_TYPE"], (r["FEED_TYPE"], "#5C6B70"))
             badge.markdown(fmt.chip(label, colour), unsafe_allow_html=True)
+            if isinstance(r.get("PACK_LABEL"), str):
+                st.caption(f"New use case: **{r['PACK_LABEL']}** v{int(r['PACK_VERSION'])} — "
+                           "built and released from CoCo CLI")
             st.markdown(fmt.state_badge(r["STATE_NAME"], r["SEVERITY"]), unsafe_allow_html=True)
             m = st.columns(3)
             m[0].metric("Relationship", fmt.lakh(r["RELATIONSHIP_VALUE"]))
@@ -450,6 +462,53 @@ def next_best(cid, persona, prof):
                             st.markdown(f"- {w}")
                     st.caption(f"Accepted by {fmt.pct(pr['ACCEPTANCE_RATE'])} of customers it "
                                f"was offered to.")
+
+    # ── released use cases (built in CoCo CLI with the use-case studio) ─────
+    for _, p in sf.studio_packs().iterrows():
+        dom = p["DECISION_DOMAIN_ID"]
+        offers = sf.recommend_pack(dom, cid)
+        if not len(offers):
+            continue
+        top = offers.iloc[0]
+        with st.container(border=True):
+            st.markdown(fmt.chip("Upgrade", "#2E7D52") +
+                        f" &nbsp; <span style='color:#5C6B70'>{p['LABEL']} · v{int(p['VERSION'])} · "
+                        "built and released from CoCo CLI</span>", unsafe_allow_html=True)
+            if bool(top["SUPPRESSED"]):
+                st.markdown(f"**Held back** · {top['CANDIDATE_NAME']}")
+                st.caption(str(top["SUPPRESSION_REASON"]))
+                continue
+            st.markdown(f"### {top['CANDIDATE_NAME']}")
+            ev = sf.pack_evidence(cid)
+            quotes = dict(zip(ev["SIGNAL_NAME"] + "=" + ev["SIGNAL_VALUE"], ev["QUOTE"])) if len(ev) else {}
+            st.markdown("**Why now**")
+            for part in str(top["MATCH_REASONS"]).split(","):
+                key = part.strip()
+                k, _, v = key.partition("=")
+                line = f"- {k.replace('_', ' ')}: {v.replace('_', ' ').lower()}"
+                if key in quotes:
+                    line += f" — *“{str(quotes[key]).strip()}”*"
+                st.markdown(line)
+            if len(offers) > 1:
+                st.caption("Also fits: " + ", ".join(offers["CANDIDATE_NAME"].iloc[1:3]))
+            done = st.session_state.get(f"pack_done_{dom}_{cid}")
+            if done:
+                st.success(done)
+            else:
+                acc = sf.pack_acceptance(dom, top["CANDIDATE_ID"])
+                if len(acc):
+                    st.caption(f"Accepted by {fmt.pct(acc.iloc[0]['ACCEPTANCE_RATE'])} of "
+                               f"{int(acc.iloc[0]['OFFERED_COUNT'])} customers offered so far.")
+                else:
+                    st.caption("New offer — every outcome you record starts its track record.")
+                b = st.columns(2)
+                for i, (lbl, ok) in enumerate([("Customer accepted", True), ("Customer declined", False)]):
+                    if b[i].button(lbl, key=f"pack_{dom}_{cid}_{ok}", type="primary" if ok else "secondary"):
+                        sf.record_pack_outcome(dom, top["CANDIDATE_ID"], cid, ok)
+                        st.session_state[f"pack_done_{dom}_{cid}"] = (
+                            f"Recorded: {top['CANDIDATE_NAME']} {'accepted' if ok else 'declined'}. "
+                            "The pack's track record is updated for the next recommendation.")
+                        st.rerun()
     st.write("")
 
 

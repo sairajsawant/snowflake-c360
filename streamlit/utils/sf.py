@@ -7,6 +7,8 @@ interpolated, which matters because transcripts contain quotes and apostrophes.
 """
 import json
 
+import pandas as pd
+
 import streamlit as st
 from snowflake.snowpark.context import get_active_session
 
@@ -499,6 +501,66 @@ def signals_by_category(domain=None):
 # ── personalization (product recommendation) ──────────────────────────────────
 def recommend_product(cid):
     return _df(f"SELECT * FROM TABLE({DB}.APP.RECOMMEND_PRODUCT({_lit(cid)}))")
+
+
+# ── use cases released by the CoCo use-case studio ───────────────────────────
+# Any pack released through STUDIO.RELEASE_RUN shows up here with no app change:
+# the registry lists it, APP.PACK_ENGINE serves it.
+@st.cache_data(ttl=300, show_spinner=False)
+def studio_packs():
+    return _df(f"""
+        SELECT m.decision_domain_id, d.label, m.version, m.priority_tier, m.released_by_run
+        FROM {DB}.CONFIG.PACK_META m
+        JOIN {DB}.CONFIG.DECISION_DOMAIN d ON d.decision_domain_id = m.decision_domain_id
+        WHERE d.active AND d.implementation = 'GENERIC'
+        ORDER BY m.decision_domain_id""")
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def pack_feed(persona_scope, assigned_user="rm1", team="team_alpha"):
+    """Top offer per in-scope customer from every released studio pack, feed-shaped."""
+    frames = []
+    for _, p in studio_packs().iterrows():
+        frames.append(_df(f"""
+            SELECT e.customer_id, c.full_name, c.domain, 'OPPORTUNITY' AS feed_type,
+                   e.state_name, e.severity, rv.relationship_value,
+                   e.candidate_name AS headline, e.score, e.match_reasons AS detail,
+                   ? AS pack_id, ? AS pack_label, ? AS pack_version
+            FROM TABLE({DB}.APP.PACK_ENGINE(NULL::VARCHAR, ?)) e
+            JOIN {DB}.CANONICAL.CUSTOMER c ON c.customer_id = e.customer_id
+            LEFT JOIN {DB}.CONFIG.CUSTOMER_ASSIGNMENT ca
+                   ON ca.customer_id = e.customer_id AND ca.domain = c.domain
+            LEFT JOIN {DB}.APP.V_RELATIONSHIP_VALUE rv
+                   ON rv.customer_id = e.customer_id AND rv.domain = c.domain
+            WHERE e.ranking = 1 AND NOT e.suppressed
+              AND (? = 'ALL' OR (? = 'ASSIGNED' AND ca.assigned_user = ?)
+                   OR (? = 'TEAM' AND ca.assigned_team = ?))
+            ORDER BY e.score DESC, COALESCE(rv.relationship_value, 0) DESC""",
+            [p["DECISION_DOMAIN_ID"], p["LABEL"], int(p["VERSION"]), p["DECISION_DOMAIN_ID"],
+             persona_scope, persona_scope, assigned_user or "", persona_scope, team or ""]))
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def recommend_pack(domain_id, cid):
+    return _df(f"SELECT * FROM TABLE({DB}.APP.RECOMMEND_PACK(?, ?))", [domain_id, cid])
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def pack_evidence(cid):
+    """The quote behind each custom signal for this customer."""
+    return _df(f"""SELECT signal_name, signal_value, quote FROM {DB}.APP.CUSTOM_SIGNAL_VALUE
+                   WHERE customer_id = ?""", [cid])
+
+
+def pack_acceptance(domain_id, candidate_id):
+    return _df(f"""SELECT acceptance_rate, offered_count FROM {DB}.ENGINE.DECISION_EFFECTIVENESS
+                   WHERE decision_domain_id = ? AND candidate_id = ?""", [domain_id, candidate_id])
+
+
+def record_pack_outcome(domain_id, candidate_id, cid, accepted):
+    return _scalar(f"CALL {DB}.APP.RECORD_DECISION_OUTCOME(?, ?, ?, ?)",
+                   [domain_id, candidate_id, cid, bool(accepted)])
 
 
 def extract_product_interest(cid):

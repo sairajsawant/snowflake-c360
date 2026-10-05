@@ -335,13 +335,13 @@ diagram_slide(prs, "Extend it from CoCo CLI: one brief, four approvals",
 
 # ---------------------------------------------------------------------------
 # 11c · use-case studio, measured
-s = new_slide(prs, "One brief to a live use case, safely",
-              "Life-Event Cover Upgrade, built on this book. The expert typed one sentence and approved four gates.")
+s = new_slide(prs, "Life-Event Cover Upgrade, built by CoCo agents",
+              "One CoCo skill and five subagents: one sentence from the expert, four approvals, live in an RM's feed.")
 gates = [
-    ("G1 · PLAN", "6 + 2", "6 signals reused, 2 built: cover gap from policy and claims records, life event from what customers said.", SKY_T),
-    ("G2 · SIGNALS", "0.46 → 0.83", "Precision of the life-event signal (95% CI 0.72–0.91). The builder fixed its own definitions.", OLIVE_T),
-    ("G3 · SIMULATE", "147", "customers reached of 261 matched; 114 held back by risk or guardrail; 0 violations. An off-catalog offer was refused.", HEATHER_T),
-    ("G4 · RELEASE", "19 rows", "Version 1 live, no engine code. Rolls back in one call.", CLAY_T),
+    ("G1 · SCOUT", "8 + 2", "8 signals reused, 2 built: cover gap from policy and claims records, life event from what customers said.", SKY_T),
+    ("G2 · SIGNAL BUILDER", "0.81 → 0.91", "Precision of the life-event signal (95% CI 0.72–0.98). It tightened its own definitions and dropped a label it couldn't make reliable.", OLIVE_T),
+    ("G3 · DESIGNER + SIMULATOR", "157", "customers reached of 278 matched; 121 held back. 3 conflicts with service recovery found and fixed; 0 violations.", HEATHER_T),
+    ("G4 · RELEASE MANAGER", "23 rows", "Version 1 live, no engine code, already in an RM's feed. Rolls back in one call.", CLAY_T),
 ]
 gw = (9.1 - 3 * 0.15) / 4
 for i, (cap, big, body, fill) in enumerate(gates):
@@ -353,7 +353,7 @@ for i, (cap, big, body, fill) in enumerate(gates):
 box(s, 0.45, 4.4, 9.1, 0.82, fill=OAT)
 text(s, 0.68, 4.4, 8.7, 0.82,
      [[("Then change it.  ", {"bold": True}),
-       ("Tuning shows before/after (147 → 99 reached, nobody else's offer changed). Ask for something unsafe "
+       ("Tuning shows before/after: who gains, who loses, whose offer changes. Ask for something unsafe "
         "and Snowflake refuses it: weights are capped, guardrails can't be removed, approvals are bound to the exact draft.",
         {"color": INK})]], size=11.5, anchor=MSO_ANCHOR.MIDDLE)
 

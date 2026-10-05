@@ -61,7 +61,12 @@ knows it's working on insurance: they read the signal catalog, the action catalo
 and the use-case registry. Point the same skill at lending, mutual funds or telecom
 and the gates, bounds and release path are unchanged.
 
-## Try it with one use case (5 minutes)
+## Built by the agents: Life-Event Cover Upgrade (live today)
+
+The first use case built with the studio. The `c360-usecase` skill and its five CoCo
+subagents took it from one sentence to a released pack in Relationship Manager 1's feed.
+
+## Try it yourself (5 minutes)
 
 From a clone of this repository, with CoCo CLI connected to the account:
 
@@ -69,21 +74,21 @@ From a clone of this repository, with CoCo CLI connected to the account:
 $c360-usecase Find health policyholders whose cover no longer fits their life and offer the right upgrade
 ```
 
-Answer `approve` at each gate. What you'll see (measured on this book):
+Answer `approve` at each gate. What the agents produced for the live use case (`runs/UC-20261005-2055/`):
 
 | Gate | Evidence shown |
 |---|---|
-| **G1 · plan** | in scope, NEW pack, tier GROW; 6 signals reused; 2 to build — `cover_gap` (records) and `life_event` (calls) |
-| **G2 · signals** | `cover_gap` on 220 customers; `life_event` precision 0.46 on the first definitions, **0.83 (95% CI 0.72–0.91)** after the builder tightened them (an existing wife is not a marriage; a mother-in-law is not a parent) |
-| **G3 · playbook + simulation** | 3 catalog offers (the off-catalog "add a member" becomes a catalog request); 4 cited guardrails; 261 match, **147 reached**, 114 held back (92 churn risk, 22 guardrails), 3 conflicts with service recovery flagged, **0 violations** |
-| **G4 · release** | version 1 live as **19 configuration rows**; `RECOMMEND_PACK('life_event_upgrade', 'INS-2001')` → Maternity Cover Add-on, because of a pregnancy mention plus maternity interest |
+| **G1 · plan** — *scout* | in scope, NEW pack, tier GROW; 6 signals reused (8 by release); 2 to build — `cover_gap` (records) and `life_event` (calls) |
+| **G2 · signals** — *signal builder* | `cover_gap` on 220 customers; `life_event` round 1 precision 0.81 but lower bound 0.696 < 0.70 (a mother-in-law and a parent in ICU counted as dependent parents); two tightening rounds, then the `parent_dependent` label was **dropped** (lower bound 0.49) instead of shipped; final **0.91 (95% CI 0.72–0.98)** on 22 customers |
+| **G3 · playbook + simulation** — *designer, simulator* | 3 catalog offers, 2 catalog requests (add a member; cover for a non-senior's parents); bounds pass first time; first simulation flags 3 customers also owed a fee waiver → designer adds cited service guardrails → 278 match, **157 reached**, 121 held back, **0 conflicts, 0 violations** |
+| **G4 · release** — *release manager* | version 1 live as **23 configuration rows**; `RECOMMEND_PACK('life_event_upgrade', 'INS-1009')` → Super Top-up (cover gap + *"Meri wife ka delivery hua…"*), now in Relationship Manager 1's feed |
 
 Then:
 
 ```text
 $c360-usecase --modify life_event_upgrade Super top-up is offered too widely; only offer it when the cover gap is HIGH.
 ```
-Before/after: 147 → 99 reached, 48 lost, no one else's offer changed → version 2.
+Before/after shows customers gained, lost and whose offer changed → version 2.
 
 ```text
 $c360-usecase --modify life_event_upgrade Weight 5 on cover gap, and drop the poor-service guardrail.
@@ -103,10 +108,10 @@ Unattended: `$c360-usecase --replay tests/scenarios/A_life_event_upgrade.yaml`
 |---|---|---|
 | 0:00 | the brief typed into CoCo CLI | "Every new use case is usually a project. Here it's one sentence." |
 | 0:20 | G1 card: 6 signals reused, 2 to build | "It reads the platform's own catalogs first — reuse before build." |
-| 0:50 | G2: precision 0.46 → 0.83 with the rejected quotes | "It measured its own AI signal, saw it was counting existing marriages, and fixed the definition before asking me." |
-| 1:30 | G3: 147 reached, 114 held back, 0 violations; the catalog request | "Every customer simulated through the exact engine production uses. Nobody at risk gets upsold. It can't invent a product." |
+| 0:50 | G2: precision rounds, the dropped label, the rejected quotes | "It measured its own AI signal, caught it counting in-laws as parents, and dropped what it couldn't make reliable — before asking me." |
+| 1:30 | G3: 157 reached, 121 held back, 3 conflicts fixed, 0 violations | "Every customer simulated through the exact engine production uses. Nobody at risk or owed a fix gets upsold. It can't invent a product." |
 | 2:10 | try to write to CONFIG directly → hook blocks it | "Even the agents can't touch production. Only the release procedure can, and only for what I approved." |
-| 2:30 | G4 release → `RECOMMEND_PACK` for one customer | "Live, versioned, 19 rows, no engine code — and one call to roll back." |
+| 2:30 | G4 release → RM 1's My Feed and Rohit Joshi's Customer 360 | "Live, versioned, 23 rows, no engine code — on the RM's worklist, and one call to roll back." |
 | 2:50 | close | "The next use case reuses everything this one built." |
 
 ## What it deliberately doesn't do (yet)

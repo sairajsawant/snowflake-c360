@@ -12,7 +12,8 @@ learns from every outcome. Everything runs inside Snowflake.
 sentence in CoCo CLI. A multi-agent CoCo skill builds the signals, designs the offers
 and guardrails, simulates the change on every customer and releases it as a versioned,
 reversible configuration change — after four approvals, within bounds Snowflake
-enforces. New use cases stop being projects. [How it works ↓](#use-case-studio-a-multi-agent-coco-skill-that-extends-the-platform-safely)
+enforces. New use cases stop being projects. The first one built this way —
+**Life-Event Cover Upgrade** — is live on this book and in a relationship manager's feed. [How it works ↓](#use-case-studio-a-multi-agent-coco-skill-that-extends-the-platform-safely)
 
 ---
 
@@ -323,20 +324,20 @@ registries, so the same skill works for any line of business.
 
 ![Use-case studio](docs/images/usecase-studio.png)
 
-#### Try it with one use case: Life-Event Cover Upgrade
+#### Built by the agents: Life-Event Cover Upgrade, live today
 
 ```text
 $c360-usecase Find health policyholders whose cover no longer fits their life and offer the right upgrade
 ```
 
-You answer `approve` four times. What happens in between (measured on this book):
+This use case was built end to end by the `c360-usecase` skill and its five CoCo subagents, from that one sentence and four approvals. It is live: Relationship Manager 1 sees its offers in **My Feed** and acts on them from **Customer 360**. Every artifact is in `runs/UC-20261005-2055/` and every gate decision in `STUDIO.RUN_LEDGER`. Run the same command to build your own:
 
-| Gate | What you see |
+| Gate · subagent | What it produced |
 |---|---|
-| **G1 · card and plan** | in scope, NEW pack, tier GROW; signals reused (`product_interest`, `renewal_proximity`, plus four guardrail signals) and two to build: `cover_gap` from policy and claims records, `life_event` from what customers said |
-| **G2 · signals** | `cover_gap` on 220 customers. `life_event` labels marriage, pregnancy or newborn, parent dependent: first definitions scored precision 0.46 (an existing wife counted as a marriage, a mother-in-law as a parent); the builder tightened them itself to **0.83, 95% interval 0.72–0.91**, above the 0.70 gate |
-| **G3 · playbook and simulation** | three offers, all from the catalog; "add a member to the floater" isn't in the catalog, so it's a catalog request, not an invented offer. Four cited guardrails. Whole book: 261 customers match, **147 reached**, 114 held back (92 at churn risk, 22 by guardrails), 3 conflicts with service recovery flagged, **0 violations**, deterministic |
-| **G4 · release** | version 1 goes live as **19 configuration rows**, no engine code. `APP.RECOMMEND_PACK('life_event_upgrade', 'INS-2001')` returns Maternity Cover Add-on, because of a pregnancy mention and maternity interest |
+| **G1 · card and plan** — *c360-scout* | in scope, NEW pack, tier GROW; 6 signals reused (`product_interest`, `renewal_proximity` and four guardrail signals; two more join as guardrails at G3) and two to build: `cover_gap` from policy and claims records, `life_event` from what customers said |
+| **G2 · signals** — *c360-signal-builder* | `cover_gap` on 220 customers. `life_event` was measured by an independent AI check of every positive: round 1 scored 0.81 but its 95% lower bound (0.696) missed the 0.70 gate — a mother-in-law and a parent in ICU had been counted as dependent parents. The builder tightened the definition twice, then **dropped the `parent_dependent` label** rather than ship it (its own lower bound was 0.49). Final: **precision 0.91, 95% interval 0.72–0.98**, 22 customers, every one with the quote |
+| **G3 · playbook and simulation** — *c360-nba-designer, c360-simulator* | three offers, all from the catalog; "add a member to the floater" and "cover for a non-senior's parents" aren't in the catalog, so they're catalog requests, not invented offers. Bounds B0–B9 pass first time. The first simulation found **3 customers also owed a fee waiver by service recovery**; the designer added cited guardrails on the service signals and the second simulation showed 0 conflicts: 278 match, **157 reached**, 121 held back (95 at churn risk, 26 by guardrails), **0 violations**, deterministic |
+| **G4 · release** — *c360-release-manager* | version 1 goes live as **23 configuration rows** (1 use case, 3 offers, 9 rules, 8 guardrails, 2 signals), no engine code. Rohit Joshi (INS-1009, Relationship Manager 1's book) gets Super Top-up because his Family Floater is ₹5 L and he said *"Meri wife ka delivery hua Manipal Hospital mein"* — and it's now in RM 1's **My Feed** and on his Customer 360, where the RM records the customer's answer |
 
 Then change it:
 
@@ -344,8 +345,8 @@ Then change it:
 $c360-usecase --modify life_event_upgrade Super top-up is offered too widely; only offer it when the cover gap is HIGH.
 ```
 
-The simulation shows before/after (147 → 99 reached, 48 lost, nobody else's offer changed),
-and the release becomes version 2. Ask for something unsafe — *"weight 5 on cover gap and
+The simulation shows before/after — customers gained, lost and whose offer changed — and
+the release becomes version 2. Ask for something unsafe — *"weight 5 on cover gap and
 drop the poor-service guardrail"* — and the bounds refuse both (B4, B8) with the reason.
 `CALL CUSTOMER_360_DB.STUDIO.ROLLBACK_RUN('<run_id>')` puts back exactly what was there.
 
@@ -401,9 +402,9 @@ Generation is deterministic (`scripts/generate_scale.py`). No real customer data
 
 - **A new use case in one CoCo CLI session.** The use-case studio turns a domain expert's
   brief into a released pack: reused and new signals, catalog offers, cited guardrails,
-  a simulation of every customer, four approvals. The life-event upgrade below came to
-  19 configuration rows and no engine code — the same size as Service Recovery, which was
-  built by hand.
+  a simulation of every customer, four approvals. The life-event upgrade below, built by
+  the skill and its subagents, came to 23 configuration rows and no engine code, released in one session — Service Recovery,
+  built by hand, took 19.
 - **Any domain, same skill.** The agents read the platform's registries — signals, offers,
   use cases, capabilities — and never hard-code insurance. Point them at lending,
   mutual funds or telecom and the same orchestrator, gates and bounds apply.
