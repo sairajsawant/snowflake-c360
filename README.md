@@ -1,7 +1,10 @@
 # Customer 360 Decisioning Platform
 
 **Snowflake CoCo CLI Hackathon 2026 · GCC Edition**
-**Team:** Simplifiers · **Problem statement:** #2 — Customer 360 and Next Best Action Engine
+
+**Team:** Simplifiers
+
+**Problem statement:** #2 — Customer 360 and Next Best Action Engine
 
 One platform that turns every customer touchpoint — policies, claims, payments, calls,
 emails and tickets — into a single live customer view, reads what customers actually
@@ -43,25 +46,6 @@ can be undone from the sidebar (**Start over**), so you can't break anything for
 next judge.
 
 > The first page load can take a few seconds while the warehouse starts.
-
----
-
-## For judges: criteria map
-
-One row per criterion, CoCo phase and bonus. Each links to the file or section that proves it.
-
-| | What to look at | Evidence |
-|---|---|---|
-| **Real-world relevance** | Indian health insurance pain points (stuck cashless claims, IRDAI grievances, portability, premium shocks); three personas with real authority limits; a 510-customer book in English and Hinglish | [The problem](#the-problem) · [Data](#data) · deck slides 2 and 17 · [demo video](https://www.youtube.com/watch?v=HyYcURLRBt8) |
-| **Technical execution** | Four isolated layers on Snowflake; AI reads, deterministic rules decide; every signal keeps its quote; one set-based engine verified row for row against the live one | [Architecture](#architecture) · [Snowflake capabilities used](#snowflake-capabilities-used) · [`sql/app/`](sql/app/) (26 scripts) · [`26_usecase_studio.sql`](sql/app/26_usecase_studio.sql) |
-| **Completeness** | Live app with judge login; feed → Customer 360 → act → approve → learn; a new use case built and released end to end | [Try it](#try-it) · [How to test each feature](#how-to-test-each-feature) (16 steps) · [What's in the app](#whats-in-the-app) · [Life-Event Cover Upgrade](#built-by-the-agents-life-event-cover-upgrade-live-today) |
-| **CoCo · plan** | Plan mode produced the platform plan and its validation checklist; the scout subagent writes a use-case card and build plan per run | [`.cortex/plans/`](.cortex/plans/) · [`runs/UC-20261005-2055/card.md`](runs/UC-20261005-2055/card.md), [`plan.md`](runs/UC-20261005-2055/plan.md) |
-| **CoCo · dev** | Seeded and scaled the synthetic data; built every SQL layer, the semantic view, the Cortex Agent, the Streamlit app and the studio kernel | [`scripts/`](scripts/) · [`sql/app/`](sql/app/) · [`streamlit/`](streamlit/) · [`12_semantic_view_and_agent.sql`](sql/app/12_semantic_view_and_agent.sql) |
-| **CoCo · exec** | Skills run against the live account; the use-case studio built and released a use case with every gate recorded | [`runs/RUN_LEDGER.md`](runs/RUN_LEDGER.md) · [`runs/UC-20261005-2055/`](runs/UC-20261005-2055/) · demo video 7:28 |
-| **CoCo · test** | Validation checklist; decision-audit skill; signal precision measured with 95% intervals; whole-book simulation with invariants and bounds before any release | [`validation-checklist.md`](.cortex/plans/validation-checklist.md) · [`c360-decision-audit`](skills/c360-decision-audit/SKILL.md) · [`signals.md`](runs/UC-20261005-2055/signals.md) · [`simulation.md`](runs/UC-20261005-2055/simulation.md) |
-| **Bonus · skills** | Five CoCo skills, published to a Snowflake stage for any team | [`skills/`](skills/) · [CoCo CLI](#coco-cli) |
-| **Bonus · multi-agent** | One orchestrator skill and five specialist CoCo subagents, each with its own tools and gate | [`.cortex/agents/`](.cortex/agents/) · [`c360-usecase`](skills/c360-usecase/SKILL.md) · [Use-case studio](#use-case-studio-a-multi-agent-coco-skill-that-extends-the-platform-safely) |
-| **Bonus · guardrails** | A PreToolUse hook blocks any direct production write; bounds B0–B9 and hash-bound approvals enforced in Snowflake; every offer guardrail cited; per-role spending limits | [`guard_prod.py`](.cortex/hooks/guard_prod.py) · [`settings.json`](.cortex/settings.json) · [`bounds.md`](skills/c360-usecase/references/bounds.md) · [`playbook.md`](runs/UC-20261005-2055/playbook.md) · [Enterprise readiness](#enterprise-readiness) |
 
 ---
 
@@ -465,3 +449,22 @@ Generation is deterministic (`scripts/generate_scale.py`). No real customer data
 | `deck/` | submission deck and its editable architecture diagrams |
 | `docs/` | architecture images, the use-case studio guide and the manual onboarding playbook |
 | `scripts/` | data generation helpers |
+
+---
+
+## For judges: criteria map
+
+One row per criterion, CoCo phase and bonus. Each links to the file or section that proves it.
+
+| | What to look at | Evidence |
+|---|---|---|
+| **Real-world relevance** | Indian health insurance pain points (stuck cashless claims, IRDAI grievances, portability, premium shocks); three personas with real authority limits; a 510-customer book in English and Hinglish | [The problem](#the-problem) · [Data](#data) · deck slides 2 and 17 · [demo video](https://www.youtube.com/watch?v=HyYcURLRBt8) |
+| **Technical execution** | Four isolated layers on Snowflake; AI reads, deterministic rules decide; every signal keeps its quote; one set-based engine verified row for row against the live one | [Architecture](#architecture) · [Snowflake capabilities used](#snowflake-capabilities-used) · [`sql/app/`](sql/app/) (26 scripts) · [`26_usecase_studio.sql`](sql/app/26_usecase_studio.sql) |
+| **Completeness** | Live app with judge login; feed → Customer 360 → act → approve → learn; a new use case built and released end to end | [Try it](#try-it) · [How to test each feature](#how-to-test-each-feature) (16 steps) · [What's in the app](#whats-in-the-app) · [Life-Event Cover Upgrade](#built-by-the-agents-life-event-cover-upgrade-live-today) |
+| **CoCo · plan** | Plan mode produced the platform plan and its validation checklist; the scout subagent writes a use-case card and build plan per run | [`.cortex/plans/`](.cortex/plans/) · [`runs/UC-20261005-2055/card.md`](runs/UC-20261005-2055/card.md), [`plan.md`](runs/UC-20261005-2055/plan.md) |
+| **CoCo · dev** | Seeded and scaled the synthetic data; built every SQL layer, the semantic view, the Cortex Agent, the Streamlit app and the studio kernel | [`scripts/`](scripts/) · [`sql/app/`](sql/app/) · [`streamlit/`](streamlit/) · [`12_semantic_view_and_agent.sql`](sql/app/12_semantic_view_and_agent.sql) |
+| **CoCo · exec** | Skills run against the live account; the use-case studio built and released a use case with every gate recorded | [`runs/RUN_LEDGER.md`](runs/RUN_LEDGER.md) · [`runs/UC-20261005-2055/`](runs/UC-20261005-2055/) · demo video 7:28 |
+| **CoCo · test** | Validation checklist; decision-audit skill; signal precision measured with 95% intervals; whole-book simulation with invariants and bounds before any release | [`validation-checklist.md`](.cortex/plans/validation-checklist.md) · [`c360-decision-audit`](skills/c360-decision-audit/SKILL.md) · [`signals.md`](runs/UC-20261005-2055/signals.md) · [`simulation.md`](runs/UC-20261005-2055/simulation.md) |
+| **Bonus · skills** | Five CoCo skills, published to a Snowflake stage for any team | [`skills/`](skills/) · [CoCo CLI](#coco-cli) |
+| **Bonus · multi-agent** | One orchestrator skill and five specialist CoCo subagents, each with its own tools and gate | [`.cortex/agents/`](.cortex/agents/) · [`c360-usecase`](skills/c360-usecase/SKILL.md) · [Use-case studio](#use-case-studio-a-multi-agent-coco-skill-that-extends-the-platform-safely) |
+| **Bonus · guardrails** | A PreToolUse hook blocks any direct production write; bounds B0–B9 and hash-bound approvals enforced in Snowflake; every offer guardrail cited; per-role spending limits | [`guard_prod.py`](.cortex/hooks/guard_prod.py) · [`settings.json`](.cortex/settings.json) · [`bounds.md`](skills/c360-usecase/references/bounds.md) · [`playbook.md`](runs/UC-20261005-2055/playbook.md) · [Enterprise readiness](#enterprise-readiness) |
