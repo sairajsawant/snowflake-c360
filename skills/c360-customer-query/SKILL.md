@@ -26,7 +26,7 @@ platform decides; this skill routes and reports.
    say so and give the `SUPPRESSION_REASON`. It is a deliberate product
    decision, not a filter to hide.
 
-> The warehouse auto-suspends after 60s, so the first query of a session may
+> The warehouse starts on demand, so the first query of a session may
 > take ~20–30s to resume. That is expected; do not retry.
 
 ## Step 1 — resolve the customer (always first)

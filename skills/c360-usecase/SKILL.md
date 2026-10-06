@@ -1,6 +1,6 @@
 ---
 name: c360-usecase
-description: "Orchestrator for adding or changing a Customer 360 decision use case from a domain expert's plain-language brief — new use case packs, new signals (from records or from what customers said), tuning an existing pack's rules, weights or guardrails. Delegates each layer to a specialist subagent (c360-scout, c360-signal-builder, c360-nba-designer, c360-simulator, c360-release-manager), stops at four approval gates, simulates every change on the whole book before release, enforces hard bounds, and ships through a versioned, reversible release. Triggers: new use case, add a use case, onboard a use case, new signal, add a signal, tune a pack, change weights, change a guardrail, extend the platform, $c360-usecase, --replay."
+description: "Orchestrator for adding or changing a Customer 360 decision use case from a domain expert's plain-language brief — new use case packs, new signals (from records or from what customers said), tuning an existing pack's rules, weights or guardrails. Delegates each layer to a specialist subagent (c360-scout, c360-signal-builder, c360-nba-designer, c360-simulator, c360-release-manager), stops at four approval gates, simulates every change on the whole book before release, enforces hard bounds, and ships through a versioned, reversible release. Triggers: new use case, add a use case, onboard a use case, new signal, add a signal, tune a pack, change weights, change a guardrail, extend the platform, $c360-usecase."
 tools:
 - sql_execute
 - snowflake_sql_execute
@@ -23,8 +23,6 @@ Everything you and the agents produce lands in `runs/<run_id>/` and in the
 ## Inputs
 
 - `$c360-usecase <brief>` — the expert's words. Infer everything you can.
-- `$c360-usecase --replay tests/scenarios/<file>.yaml` — scripted expert: take
-  the brief, answers and gate decisions from the file, still print every gate.
 - `$c360-usecase --modify <domain_id> <change>` — change a live pack.
 
 Keep inputs to a minimum: **propose defaults and ask the expert to approve them**,
@@ -115,11 +113,10 @@ CALL CUSTOMER_360_DB.STUDIO.APPROVE('<run_id>', 'G<n>', '<APPROVE|REJECT|EDIT>',
 - `edit: <instruction>` → record EDIT, route the instruction to the agent that
   owns that layer (G1 scout, G2 signal-builder, G3 nba-designer), redo from
   there. Any draft change invalidates later approvals automatically (hash).
-- `reject: <reason>` → record, mark the run abandoned
-  (`UPDATE CUSTOMER_360_DB.STUDIO.RUN SET status='ABANDONED' WHERE run_id=...`), stop.
+- `reject: <reason>` → record, close the run
+  (`UPDATE CUSTOMER_360_DB.STUDIO.RUN SET status='REJECTED' WHERE run_id=...`), stop.
 
-Never record an APPROVE the expert did not give. In `--replay`, the approver is
-`replay:<file>` and the decision comes from the file.
+Never record an APPROVE the expert did not give.
 
 ## Gate format (identical at every gate)
 

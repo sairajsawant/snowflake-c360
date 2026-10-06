@@ -9,39 +9,19 @@
 --     the writing on the judge's behalf,
 --   * no direct INSERT / UPDATE / DELETE anywhere.
 --
--- Judges run on their own warehouse with a credit cap, so a runaway AI loop
--- cannot suspend COMPUTE_WH and take the demo down with it.
+-- Judges share COMPUTE_WH (XSMALL, 30s auto-suspend, single cluster), which the
+-- account-wide resource monitor and statement timeouts keep bounded.
 --
--- Idempotent: safe to re-run after any schema change — CREATE ROLE/WAREHOUSE
--- IF NOT EXISTS and the user object itself are untouched if they already exist.
+-- Idempotent: safe to re-run after any schema change — CREATE ROLE IF NOT
+-- EXISTS and the user object itself are untouched if they already exist.
 -- =============================================================================
 USE ROLE ACCOUNTADMIN;
-
--- ─── isolated compute with a hard cap ────────────────────────────────────────
-CREATE WAREHOUSE IF NOT EXISTS JUDGE_WH
-  WAREHOUSE_SIZE = 'XSMALL'
-  AUTO_SUSPEND = 300
-  AUTO_RESUME = TRUE
-  INITIALLY_SUSPENDED = TRUE
-  COMMENT = 'Evaluation traffic only. Capped by JUDGE_MONITOR.';
-
-CREATE RESOURCE MONITOR IF NOT EXISTS JUDGE_MONITOR
-  WITH CREDIT_QUOTA = 20
-  FREQUENCY = MONTHLY
-  START_TIMESTAMP = IMMEDIATELY
-  TRIGGERS
-    ON 75 PERCENT DO NOTIFY
-    ON 90 PERCENT DO NOTIFY
-    ON 100 PERCENT DO SUSPEND;
-
-ALTER WAREHOUSE JUDGE_WH SET RESOURCE_MONITOR = JUDGE_MONITOR;
-ALTER WAREHOUSE JUDGE_WH SET AUTO_SUSPEND = 300;
 
 -- ─── role ────────────────────────────────────────────────────────────────────
 CREATE ROLE IF NOT EXISTS C360_JUDGE
   COMMENT = 'Hackathon evaluation: read the platform, run scenarios, change nothing directly.';
 
-GRANT USAGE ON WAREHOUSE JUDGE_WH TO ROLE C360_JUDGE;
+GRANT USAGE ON WAREHOUSE COMPUTE_WH TO ROLE C360_JUDGE;
 GRANT USAGE ON DATABASE CUSTOMER_360_DB TO ROLE C360_JUDGE;
 
 -- read access to everything the app surfaces

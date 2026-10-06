@@ -99,8 +99,6 @@ Refused: B4 (weight outside 0.05–2.0) and B8 (a live guardrail can't be remove
 CALL CUSTOMER_360_DB.STUDIO.ROLLBACK_RUN('<run_id>');   -- back to exactly what was there
 ```
 
-Unattended: `$c360-usecase --replay tests/scenarios/A_life_event_upgrade.yaml`
-(also `B_tune_pack`, `C_bounds_hold`, `D_out_of_scope`).
 
 ## 3-minute demo script
 
