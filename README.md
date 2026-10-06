@@ -25,7 +25,7 @@ enforces. New use cases stop being projects. The first one built this way —
 | | |
 |---|---|
 | **Demo video** | [Watch on YouTube](https://www.youtube.com/watch?v=HyYcURLRBt8) |
-| **Presentation** | [Submission deck (PDF)](https://drive.google.com/file/d/1bszmRAkVNPa9-gPzX-5PgR6zFWfmVpD1/view?usp=drive_link) |
+| **Presentation** | [Submission deck (PDF)](https://drive.google.com/file/d/10oSFKG-X_MEC9WYA8NQJZ0uteAvD_gA8/view?usp=drive_link) |
 | **App** | [Customer 360 Decisioning Platform](https://app.snowflake.com/KRYZXYH/eg26106/#/streamlit-apps/CUSTOMER_360_DB.APP.CUSTOMER_360_APP) |
 | **Account** | `KRYZXYH-EG26106` |
 | **User** | `C360_JUDGE` |
